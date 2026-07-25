@@ -1,0 +1,23 @@
+# ── Vocatype Desktop Client Dependencies ──────────────────────────
+# Hotkey
+pynput>=1.7.6
+
+# Audio recording
+pyaudio>=0.2.14
+
+# Text injection
+pyautogui>=0.9.54
+pyperclip>=1.9.0
+
+# Active window detection (Windows)
+pygetwindow>=0.0.9; sys_platform == "win32"
+
+# System tray
+pystray>=0.19.5
+Pillow>=10.0.0
+
+# HTTP client
+httpx>=0.27.0
+
+# Config
+python-dotenv>=1.0.0

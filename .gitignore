@@ -1,0 +1,29 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+env/
+venv/
+ENV/
+
+# Configuration & Secrets
+.env
+*.env
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store5
+Thumbs.db
+
+# Android
+.gradle/
+build/
+*.apk
+*.aab
+
+# Logs
+*.log
