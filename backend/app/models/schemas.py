@@ -4,8 +4,6 @@ Pydantic models for request/response validation.
 
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import BaseModel, Field
 
 
@@ -20,7 +18,7 @@ class AudioContext(BaseModel):
         default="unknown",
         description="Client platform: 'android', 'windows', or 'macos'.",
     )
-    selected_text: Optional[str] = Field(
+    selected_text: str | None = Field(
         default=None,
         description="Text currently selected in the active field. "
         "If present, audio is treated as a command to transform this text.",
@@ -50,4 +48,4 @@ class ErrorResponse(BaseModel):
     """Standard error envelope."""
 
     error: str
-    detail: Optional[str] = None
+    detail: str | None = None

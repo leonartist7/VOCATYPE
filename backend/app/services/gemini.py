@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import google.generativeai as genai
 
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 CASUAL_APPS: set[str] = {
     "com.whatsapp",
-    "com.facebook.orca",           # Messenger
+    "com.facebook.orca",  # Messenger
     "com.snapchat.android",
     "com.instagram.android",
     "org.telegram.messenger",
@@ -30,8 +30,8 @@ CASUAL_APPS: set[str] = {
     "com.twitter.android",
     "com.reddit.frontpage",
     "com.viber.voip",
-    "com.tencent.mm",              # WeChat
-    "com.zhiliaoapp.musically",    # TikTok
+    "com.tencent.mm",  # WeChat
+    "com.zhiliaoapp.musically",  # TikTok
     # Desktop window title fragments
     "whatsapp",
     "messenger",
@@ -44,7 +44,7 @@ CASUAL_APPS: set[str] = {
 }
 
 PROFESSIONAL_APPS: set[str] = {
-    "com.google.android.gm",       # Gmail
+    "com.google.android.gm",  # Gmail
     "com.microsoft.office.outlook",
     "com.linkedin.android",
     "com.google.android.apps.docs",
@@ -167,9 +167,7 @@ def build_system_prompt(context: dict[str, Any]) -> str:
     # ── Speak-to-edit layer ──
     selected_text = context.get("selected_text")
     if selected_text and selected_text.strip():
-        parts.append(
-            _SPEAK_TO_EDIT_INSTRUCTIONS.format(selected_text=selected_text.strip())
-        )
+        parts.append(_SPEAK_TO_EDIT_INSTRUCTIONS.format(selected_text=selected_text.strip()))
 
     # ── Language hint ──
     language = context.get("language", "en")
@@ -180,13 +178,15 @@ def build_system_prompt(context: dict[str, Any]) -> str:
         )
 
     prompt = "\n\n".join(parts)
-    logger.debug("Built system prompt (%d chars) for app='%s', tone='%s'", len(prompt), app_name, tone)
+    logger.debug(
+        "Built system prompt (%d chars) for app='%s', tone='%s'", len(prompt), app_name, tone
+    )
     return prompt
 
 
 # ── Gemini Client ──────────────────────────────────────────────────────────────
 
-_model: Optional[genai.GenerativeModel] = None
+_model: genai.GenerativeModel | None = None
 
 
 def initialize_gemini() -> None:
@@ -201,7 +201,7 @@ def initialize_gemini() -> None:
 async def process_audio(
     audio_bytes: bytes,
     filename: str,
-    content_type: Optional[str],
+    content_type: str | None,
     context: dict[str, Any],
 ) -> dict[str, str]:
     """
@@ -230,7 +230,9 @@ async def process_audio(
     mime_type = detect_mime_type(filename, content_type)
     logger.info(
         "Processing audio: filename=%s, mime=%s, size=%.1fKB, app=%s",
-        filename, mime_type, len(audio_bytes) / 1024,
+        filename,
+        mime_type,
+        len(audio_bytes) / 1024,
         context.get("app_name", "unknown"),
     )
 
@@ -242,7 +244,7 @@ async def process_audio(
     audio_part = prepare_audio_part(audio_bytes, mime_type)
 
     generation_config = genai.types.GenerationConfig(
-        temperature=0.1,          # Low temp for accurate transcription
+        temperature=0.1,  # Low temp for accurate transcription
         top_p=0.95,
         top_k=40,
         max_output_tokens=8192,
@@ -293,7 +295,7 @@ def _parse_gemini_response(raw_text: str, tone: str) -> dict[str, str]:
     if cleaned.startswith("```"):
         # Remove opening fence
         first_newline = cleaned.index("\n")
-        cleaned = cleaned[first_newline + 1:]
+        cleaned = cleaned[first_newline + 1 :]
     if cleaned.endswith("```"):
         cleaned = cleaned[:-3]
     cleaned = cleaned.strip()

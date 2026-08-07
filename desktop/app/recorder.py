@@ -5,13 +5,13 @@ Records PCM audio into an in-memory WAV buffer while a hotkey is held.
 
 from __future__ import annotations
 
+import contextlib
+import importlib
 import io
 import logging
-import struct
 import threading
 import wave
-
-import pyaudio
+from typing import Any
 
 from app.config import config
 
@@ -30,15 +30,23 @@ class AudioRecorder:
     """
 
     def __init__(self) -> None:
-        self._pa: pyaudio.PyAudio | None = None
-        self._stream: pyaudio.Stream | None = None
+        self._pyaudio: Any = None
+        self._pa: Any | None = None
+        self._stream: Any | None = None
         self._frames: list[bytes] = []
         self._is_recording = False
         self._lock = threading.Lock()
 
-    def _ensure_pyaudio(self) -> pyaudio.PyAudio:
-        """Lazily initialize PyAudio."""
+    def _ensure_pyaudio(self) -> Any:
+        """Lazily initialize PyAudio.
+
+        PyAudio is imported lazily so the app (and its test suite) can start
+        even when the native PortAudio dependency is unavailable on a given
+        platform / Python version.
+        """
         if self._pa is None:
+            pyaudio = importlib.import_module("pyaudio")
+            self._pyaudio = pyaudio
             self._pa = pyaudio.PyAudio()
         return self._pa
 
@@ -51,6 +59,7 @@ class AudioRecorder:
 
             self._frames = []
             pa = self._ensure_pyaudio()
+            pyaudio = self._pyaudio
 
             try:
                 self._stream = pa.open(
@@ -63,7 +72,11 @@ class AudioRecorder:
                 )
                 self._stream.start_stream()
                 self._is_recording = True
-                logger.info("🎙️  Recording started (rate=%d, channels=%d)", config.sample_rate, config.channels)
+                logger.info(
+                    "🎙️  Recording started (rate=%d, channels=%d)",
+                    config.sample_rate,
+                    config.channels,
+                )
             except Exception as e:
                 logger.error("Failed to start recording: %s", e)
                 self._cleanup_stream()
@@ -93,7 +106,9 @@ class AudioRecorder:
             duration = (frame_count * config.chunk_size) / config.sample_rate
             logger.info(
                 "🛑 Recording stopped: %d frames, ~%.1fs, %d bytes WAV",
-                frame_count, duration, len(wav_bytes),
+                frame_count,
+                duration,
+                len(wav_bytes),
             )
             self._frames = []
             return wav_bytes
@@ -108,7 +123,7 @@ class AudioRecorder:
         """PyAudio callback — accumulates audio frames."""
         if in_data and self._is_recording:
             self._frames.append(in_data)
-        return (None, pyaudio.paContinue)
+        return (None, self._pyaudio.paContinue)
 
     def _frames_to_wav(self) -> bytes:
         """Convert accumulated PCM frames to a WAV file in memory."""
@@ -137,9 +152,7 @@ class AudioRecorder:
         with self._lock:
             self._cleanup_stream()
             if self._pa is not None:
-                try:
+                with contextlib.suppress(Exception):
                     self._pa.terminate()
-                except Exception:
-                    pass
                 self._pa = None
             logger.info("AudioRecorder resources released.")

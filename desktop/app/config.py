@@ -20,7 +20,9 @@ load_dotenv(_env_path)
 class Config:
     """Desktop client settings."""
 
-    backend_url: str = field(default_factory=lambda: os.getenv("BACKEND_URL", "http://localhost:8000"))
+    backend_url: str = field(
+        default_factory=lambda: os.getenv("BACKEND_URL", "http://localhost:8000")
+    )
     hotkey_combo: str = field(default_factory=lambda: os.getenv("HOTKEY_COMBO", "ctrl+space"))
 
     # Audio settings

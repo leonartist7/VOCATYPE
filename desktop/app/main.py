@@ -11,7 +11,6 @@ System tray application that:
 from __future__ import annotations
 
 import logging
-import sys
 import threading
 from pathlib import Path
 
@@ -105,6 +104,7 @@ def _process_recording() -> None:
 
 # ── System Tray ─────────────────────────────────────────────────────────────────
 
+
 def _create_tray_icon():
     """Create and return a system tray icon with a menu."""
     try:
@@ -173,6 +173,7 @@ def main() -> None:
             # Fallback: just wait for keyboard interrupt
             logger.info("Running without tray. Press Ctrl+C to quit.")
             import time
+
             while True:
                 time.sleep(1)
     except KeyboardInterrupt:

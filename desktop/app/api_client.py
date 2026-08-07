@@ -27,7 +27,7 @@ def _get_client() -> httpx.Client:
             base_url=config.backend_url,
             timeout=httpx.Timeout(
                 connect=5.0,
-                read=30.0,   # Gemini processing can take a few seconds
+                read=30.0,  # Gemini processing can take a few seconds
                 write=10.0,
                 pool=5.0,
             ),
@@ -58,7 +58,10 @@ def send_audio(
         try:
             logger.info(
                 "Sending audio to backend (attempt %d/%d, %d bytes, context=%s)",
-                attempt, max_retries, len(audio_bytes), context_json,
+                attempt,
+                max_retries,
+                len(audio_bytes),
+                context_json,
             )
 
             response = client.post(
@@ -73,7 +76,9 @@ def send_audio(
                 tone = result.get("tone_applied", "unknown")
                 logger.info(
                     "✅ Received processed text (%d chars, tone=%s): %s",
-                    len(processed), tone, processed[:80],
+                    len(processed),
+                    tone,
+                    processed[:80],
                 )
                 return processed
 

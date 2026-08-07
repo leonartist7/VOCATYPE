@@ -78,8 +78,8 @@ def _get_active_window_windows() -> str:
             pid = wintypes.DWORD()
             user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
 
-            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-            handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+            process_query_limited_info = 0x1000  # noqa: N806 (Win32 constant)
+            handle = kernel32.OpenProcess(process_query_limited_info, False, pid.value)
             if handle:
                 buf_size = wintypes.DWORD(260)
                 exe_buf = ctypes.create_unicode_buffer(260)
@@ -101,7 +101,7 @@ def _get_active_window_windows() -> str:
 def _get_active_window_macos() -> str:
     """Get the active window title on macOS using AppleScript."""
     try:
-        script = '''
+        script = """
         tell application "System Events"
             set frontApp to name of first application process whose frontmost is true
             set windowTitle to ""
@@ -110,7 +110,7 @@ def _get_active_window_macos() -> str:
             end try
             return frontApp & " - " & windowTitle
         end tell
-        '''
+        """
         result = subprocess.run(
             ["osascript", "-e", script],
             capture_output=True,

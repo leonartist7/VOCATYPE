@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
@@ -23,8 +24,7 @@ router = APIRouter(tags=["audio"])
     response_model=ProcessedResponse,
     responses={
         400: {"model": ErrorResponse, "description": "Invalid request"},
-        413: {"model": ErrorResponse, "description": "Audio file too large"},
-        500: {"model": ErrorResponse, "description": "Processing error"},
+        413: {"model": ErrorResponse, "description": "Audio file too large"},        500: {"model": ErrorResponse, "description": "Processing error"},
         503: {"model": ErrorResponse, "description": "Gemini service unavailable"},
     },
     summary="Process dictated audio through Gemini AI",
@@ -35,14 +35,14 @@ router = APIRouter(tags=["audio"])
     ),
 )
 async def process_audio_endpoint(
-    audio_file: UploadFile = File(
-        ...,
-        description="Audio file (.wav, .m4a, .webm, .ogg, .mp3, .flac, .aac, .3gp)",
-    ),
-    context: str = Form(
-        default="{}",
-        description='JSON string with keys: app_name, platform, selected_text, language',
-    ),
+    audio_file: Annotated[
+        UploadFile,
+        File(description="Audio file (.wav, .m4a, .webm, .ogg, .mp3, .flac, .aac, .3gp)"),
+    ],
+    context: Annotated[
+        str,
+        Form(description="JSON string with keys: app_name, platform, selected_text, language"),
+    ] = "{}",
 ) -> ProcessedResponse:
     """
     Process an audio recording through the Gemini AI pipeline.
@@ -62,13 +62,13 @@ async def process_audio_endpoint(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid JSON in 'context' field: {e}",
-        )
+        ) from e
     except Exception as e:
         logger.warning("Context validation error: %s", e)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Context validation error: {e}",
-        )
+        ) from e
 
     # ── Read audio file ─────────────────────────────────────────────────────
     try:
@@ -78,7 +78,7 @@ async def process_audio_endpoint(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to read audio file: {e}",
-        )
+        ) from e
 
     if not audio_bytes:
         raise HTTPException(
@@ -105,20 +105,20 @@ async def process_audio_endpoint(
         # File too large or invalid format
         logger.warning("Audio validation error: %s", e)
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=str(e),
-        )
+        ) from e
     except RuntimeError as e:
         logger.error("Gemini processing error: %s", e)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),
-        )
+        ) from e
     except Exception as e:
         logger.error("Unexpected error processing audio: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Processing failed: {e}",
-        )
+        ) from e
 
     return ProcessedResponse(**result)

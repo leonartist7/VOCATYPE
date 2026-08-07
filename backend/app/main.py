@@ -31,6 +31,7 @@ logger = logging.getLogger("vocatype")
 
 # ── Lifespan ────────────────────────────────────────────────────────────────────
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""

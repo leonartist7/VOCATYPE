@@ -5,7 +5,6 @@ Text injector — copies processed text to the clipboard and simulates a paste k
 from __future__ import annotations
 
 import logging
-import platform
 import time
 
 import pyautogui

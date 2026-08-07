@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import logging
 import mimetypes
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,7 @@ SUPPORTED_MIME_TYPES: dict[str, str] = {
 }
 
 
-def detect_mime_type(filename: str, content_type: Optional[str] = None) -> str:
+def detect_mime_type(filename: str, content_type: str | None = None) -> str:
     """
     Detect the MIME type of an audio file.
 
@@ -91,8 +90,7 @@ def validate_audio_size(
     size_mb = len(audio_bytes) / (1024 * 1024)
     if size_mb > max_size_mb:
         raise ValueError(
-            f"Audio file too large: {size_mb:.1f}MB exceeds "
-            f"maximum of {max_size_mb:.0f}MB."
+            f"Audio file too large: {size_mb:.1f}MB exceeds maximum of {max_size_mb:.0f}MB."
         )
     logger.debug("Audio size: %.2f MB (limit: %.0f MB)", size_mb, max_size_mb)
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Callable
+from collections.abc import Callable
 
 from pynput import keyboard
 from pynput.keyboard import Key, KeyCode
@@ -43,9 +43,18 @@ _SPECIAL_KEY_MAP: dict[str, Key] = {
     "escape": Key.esc,
     "backspace": Key.backspace,
     "delete": Key.delete,
-    "f1": Key.f1, "f2": Key.f2, "f3": Key.f3, "f4": Key.f4,
-    "f5": Key.f5, "f6": Key.f6, "f7": Key.f7, "f8": Key.f8,
-    "f9": Key.f9, "f10": Key.f10, "f11": Key.f11, "f12": Key.f12,
+    "f1": Key.f1,
+    "f2": Key.f2,
+    "f3": Key.f3,
+    "f4": Key.f4,
+    "f5": Key.f5,
+    "f6": Key.f6,
+    "f7": Key.f7,
+    "f8": Key.f8,
+    "f9": Key.f9,
+    "f10": Key.f10,
+    "f11": Key.f11,
+    "f12": Key.f12,
 }
 
 
@@ -63,7 +72,7 @@ def _parse_hotkey(combo_str: str) -> tuple[set[Key], Key | KeyCode]:
     modifiers: set[Key] = set()
     trigger: Key | KeyCode | None = None
 
-    for i, part in enumerate(parts):
+    for part in parts:
         if part in _MODIFIER_MAP:
             modifiers.add(_MODIFIER_MAP[part])
         elif part in _SPECIAL_KEY_MAP:
@@ -167,10 +176,7 @@ class HotkeyListener:
 
     def _is_hotkey_pressed(self) -> bool:
         """Check if all modifier keys and the trigger key are currently pressed."""
-        return (
-            self._modifiers.issubset(self._pressed_keys)
-            and self._trigger in self._pressed_keys
-        )
+        return self._modifiers.issubset(self._pressed_keys) and self._trigger in self._pressed_keys
 
     def _normalize_key(self, key: Key | KeyCode) -> Key | KeyCode:
         """Normalize right-side modifiers to left-side equivalents."""
