@@ -24,7 +24,7 @@ Thumbs.db
 # Desktop builds
 desktop/build/
 desktop/dist/
-*.spec
+!desktop/*.spec
 
 # Android
 .gradle/
