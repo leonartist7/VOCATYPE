@@ -12,12 +12,19 @@ ENV/
 # Configuration & Secrets
 .env
 *.env
+!config-sample.env
+!.env.example
 
 # IDE & OS
 .vscode/
 .idea/
-.DS_Store5
+.DS_Store
 Thumbs.db
+
+# Desktop builds
+desktop/build/
+desktop/dist/
+*.spec
 
 # Android
 .gradle/
