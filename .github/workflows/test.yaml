@@ -1,0 +1,72 @@
+name: Test
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-backend-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-backend-
+
+      - name: Install dependencies
+        run: |
+          pip install -r backend/requirements.txt
+          pip install ruff pytest pytest-asyncio pytest-mock httpx
+
+      - name: Lint (backend)
+        working-directory: backend
+        run: ruff check .
+
+      - name: Format check (backend)
+        working-directory: backend
+        run: ruff format --check .
+
+      - name: Test (backend)
+        working-directory: backend
+        run: pytest -v
+
+  desktop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r desktop/requirements-dev.txt
+
+      - name: Lint (desktop)
+        working-directory: desktop
+        run: ruff check .
+
+      - name: Format check (desktop)
+        working-directory: desktop
+        run: ruff format --check .
+
+      - name: Test (desktop)
+        working-directory: desktop
+        run: pytest -v

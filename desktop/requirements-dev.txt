@@ -1,0 +1,17 @@
+# ── Vocatype Desktop Client — Development / CI dependencies ─────────
+# These are the packages needed to run the test suite and linting.
+# NOTE: PyAudio (native PortAudio) and other heavy runtime deps are intentionally
+# omitted here — the test suite stubs them, so CI can run headless and cross-platform.
+#
+# Runtime-only deps (installed via requirements.txt on real machines):
+#   pyaudio, pyautogui, pyperclip, pystray, Pillow, pygetwindow
+
+# Runtime deps required at import time by the tested modules
+pynput>=1.7.6
+httpx>=0.27.0
+python-dotenv>=1.0.0
+
+# Test + lint
+ruff>=0.6.0
+pytest>=8.0.0
+pytest-mock>=3.14.0
