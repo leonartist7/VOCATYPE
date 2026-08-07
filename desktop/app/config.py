@@ -24,6 +24,7 @@ class Config:
         default_factory=lambda: os.getenv("BACKEND_URL", "http://localhost:8000")
     )
     hotkey_combo: str = field(default_factory=lambda: os.getenv("HOTKEY_COMBO", "ctrl+space"))
+    api_token: str = field(default_factory=lambda: os.getenv("API_TOKEN", ""))
 
     # Audio settings
     sample_rate: int = field(default_factory=lambda: int(os.getenv("SAMPLE_RATE", "16000")))

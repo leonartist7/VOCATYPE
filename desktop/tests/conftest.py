@@ -53,3 +53,13 @@ def _stub_pyaudio(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "pyaudio", stub)
     yield stub
+
+
+@pytest.fixture(autouse=True)
+def _reset_api_client(monkeypatch):
+    """Ensure the persistent HTTP client is recreated per test."""
+    from app import api_client
+
+    monkeypatch.setattr(api_client, "_client", None)
+    yield
+

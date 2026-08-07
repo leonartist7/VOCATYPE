@@ -44,3 +44,10 @@ class TestConfigEnvOverride:
         c = Config()
         assert c.backend_url == "http://example.com:9999"
         assert c.hotkey_combo == "alt+space"
+
+    def test_api_token_default_empty(self) -> None:
+        assert Config().api_token == ""
+
+    def test_api_token_from_env(self, monkeypatch) -> None:
+        monkeypatch.setenv("API_TOKEN", "sekrit-token")
+        assert Config().api_token == "sekrit-token"

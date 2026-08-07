@@ -1,31 +1,60 @@
 """
 Vocatype Backend — FastAPI Application Entry Point.
 
-Initializes the Gemini client on startup, configures CORS,
-and mounts the audio processing route.
+Initializes the Gemini client on startup, configures CORS and security
+middleware, mounts the audio processing route, and exposes observability
+endpoints (health, metrics).
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
 from app.config import get_settings
+from app.middleware import SecurityMiddleware
 from app.routes.audio import router as audio_router
 from app.services.gemini import initialize_gemini
+from app.services.metrics import content_type, metrics_enabled, render_metrics
 
 # ── Logging ─────────────────────────────────────────────────────────────────────
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s │ %(levelname)-8s │ %(name)s │ %(message)s",
-    datefmt="%H:%M:%S",
-)
+settings = get_settings()
+
+
+class _JsonFormatter(logging.Formatter):
+    """Emit structured JSON lines for Cloud Run / log collectors."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        entry = {
+            "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%SZ"),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            entry["exc_info"] = self.formatException(record.exc_info)
+        return json.dumps(entry)
+
+
+def _configure_logging() -> None:
+    level = getattr(logging, settings.log_level.upper(), logging.INFO)
+    root = logging.getLogger()
+    root.setLevel(level)
+
+    handler = logging.StreamHandler()
+    handler.setLevel(level)
+    if settings.log_format == "json":
+        handler.setFormatter(_JsonFormatter())
+    root.handlers = [handler]
+
+
 logger = logging.getLogger("vocatype")
 
 
@@ -36,7 +65,6 @@ logger = logging.getLogger("vocatype")
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
     logger.info("🚀 Vocatype backend starting up...")
-    settings = get_settings()
     logger.info("Model: %s", settings.gemini_model)
 
     # Initialize Gemini SDK
@@ -63,7 +91,6 @@ app = FastAPI(
 
 # ── CORS ────────────────────────────────────────────────────────────────────────
 
-settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -71,6 +98,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Security & observability middleware ─────────────────────────────────────────
+# Added last so it wraps everything above it in the stack.
+
+app.add_middleware(SecurityMiddleware)
+
+# ── Logging init ────────────────────────────────────────────────────────────────
+
+_configure_logging()
 
 # ── Routes ──────────────────────────────────────────────────────────────────────
 
@@ -96,6 +132,14 @@ async def health_check():
         "service": "vocatype-backend",
         "model": settings.gemini_model,
     }
+
+
+@app.get("/metrics", tags=["system"], include_in_schema=False)
+async def metrics_endpoint():
+    """Prometheus metrics for production monitoring."""
+    if not metrics_enabled():
+        return Response(content=b"# vocatype_metrics_disabled 1\n", media_type="text/plain")
+    return Response(content=render_metrics(), media_type=content_type())
 
 
 # ── Uvicorn entry point ────────────────────────────────────────────────────────

@@ -25,6 +25,30 @@ class TestSendAudio:
         assert "audio_file" in kwargs["files"]
         assert "context" in kwargs["data"]
 
+    def test_client_attaches_api_token(self) -> None:
+        with mock.patch.object(api_client, "config") as fake_config:
+            fake_config.api_token = "sekrit"
+            fake_config.backend_url = "http://localhost:8000"
+            fake_httpx_client = mock.Mock()
+            fake_httpx_client.is_closed = False
+            with mock.patch(
+                "app.api_client.httpx.Client", return_value=fake_httpx_client
+            ) as mock_client:
+                api_client._get_client()
+        assert mock_client.call_args.kwargs["headers"] == {"X-API-Token": "sekrit"}
+
+    def test_client_omits_token_when_not_configured(self) -> None:
+        with mock.patch.object(api_client, "config") as fake_config:
+            fake_config.api_token = ""
+            fake_config.backend_url = "http://localhost:8000"
+            fake_httpx_client = mock.Mock()
+            fake_httpx_client.is_closed = False
+            with mock.patch(
+                "app.api_client.httpx.Client", return_value=fake_httpx_client
+            ) as mock_client:
+                api_client._get_client()
+        assert mock_client.call_args.kwargs.get("headers") == {}
+
     def test_client_error_returns_none_no_retry(self) -> None:
         fake_client = mock.Mock()
         fake_client.post.return_value = mock.Mock(

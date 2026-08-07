@@ -23,8 +23,12 @@ def _get_client() -> httpx.Client:
     """Get or create a persistent HTTP client."""
     global _client
     if _client is None or _client.is_closed:
+        headers = {}
+        if config.api_token:
+            headers["X-API-Token"] = config.api_token
         _client = httpx.Client(
             base_url=config.backend_url,
+            headers=headers,
             timeout=httpx.Timeout(
                 connect=5.0,
                 read=30.0,  # Gemini processing can take a few seconds

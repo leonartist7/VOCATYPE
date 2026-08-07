@@ -13,6 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.middleware import _rate_buckets
 from app.routes import audio as audio_route
 
 
@@ -141,3 +142,93 @@ class TestProcessAudio:
             data={"context": "{}"},
         )
         assert resp.status_code == 500
+
+
+class TestAuthentication:
+    @staticmethod
+    def _patch_token(mocker, token: str) -> None:
+        from app.config import Settings
+
+        settings = Settings(gemini_api_key="test", api_token=token)
+        mocker.patch("app.middleware.get_settings", return_value=settings)
+
+    def test_no_token_configured_accepts_requests(
+        self, client: TestClient, wav_bytes: bytes, mocker
+    ) -> None:
+        _mock_process_audio(mocker)
+        resp = client.post(
+            "/process-audio",
+            files={"audio_file": ("test.wav", wav_bytes, "audio/wav")},
+            data={"context": "{}"},
+        )
+        assert resp.status_code == 200
+
+    def test_missing_token_rejected(self, client: TestClient, wav_bytes: bytes, mocker) -> None:
+        self._patch_token(mocker, "sekrit")
+        resp = client.post(
+            "/process-audio",
+            files={"audio_file": ("test.wav", wav_bytes, "audio/wav")},
+            data={"context": "{}"},
+        )
+        assert resp.status_code == 401
+
+    def test_wrong_token_rejected(self, client: TestClient, wav_bytes: bytes, mocker) -> None:
+        self._patch_token(mocker, "sekrit")
+        resp = client.post(
+            "/process-audio",
+            headers={"X-API-Token": "wrong"},
+            files={"audio_file": ("test.wav", wav_bytes, "audio/wav")},
+            data={"context": "{}"},
+        )
+        assert resp.status_code == 401
+
+    def test_correct_token_accepted(self, client: TestClient, wav_bytes: bytes, mocker) -> None:
+        self._patch_token(mocker, "sekrit")
+        _mock_process_audio(mocker)
+        resp = client.post(
+            "/process-audio",
+            headers={"X-API-Token": "sekrit"},
+            files={"audio_file": ("test.wav", wav_bytes, "audio/wav")},
+            data={"context": "{}"},
+        )
+        assert resp.status_code == 200
+
+    def test_health_always_public(self, client: TestClient, mocker) -> None:
+        self._patch_token(mocker, "sekrit")
+        resp = client.get("/health")
+        assert resp.status_code == 200
+
+
+class TestRateLimiting:
+    def test_rate_limit_exceeded_returns_429(
+        self, client: TestClient, wav_bytes: bytes, mocker
+    ) -> None:
+        _rate_buckets.clear()
+        from app.config import Settings
+
+        settings = Settings(gemini_api_key="test", rate_limit_per_minute=2)
+        mocker.patch("app.middleware.get_settings", return_value=settings)
+        _mock_process_audio(mocker)
+
+        for _ in range(2):
+            resp = client.post(
+                "/process-audio",
+                files={"audio_file": ("test.wav", wav_bytes, "audio/wav")},
+                data={"context": "{}"},
+            )
+            assert resp.status_code == 200
+
+        resp = client.post(
+            "/process-audio",
+            files={"audio_file": ("test.wav", wav_bytes, "audio/wav")},
+            data={"context": "{}"},
+        )
+        assert resp.status_code == 429
+        _rate_buckets.clear()
+
+
+class TestMetricsEndpoint:
+    def test_metrics_endpoint_returns_prometheus_format(self, client: TestClient) -> None:
+        resp = client.get("/metrics")
+        assert resp.status_code == 200
+        assert "text/plain" in resp.headers["content-type"]

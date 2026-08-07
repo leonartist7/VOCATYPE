@@ -28,6 +28,20 @@ class Settings(BaseSettings):
     # ── CORS ────────────────────────────────────────────────
     allowed_origins: str = "*"
 
+    # ── Authentication ──────────────────────────────────────
+    # Shared API token. When set, /process-audio requires X-API-Token header.
+    api_token: str = ""
+
+    # ── Logging ─────────────────────────────────────────────
+    log_level: str = "INFO"
+    log_format: str = "text"  # "text" or "json"
+
+    # ── Audio limits ────────────────────────────────────────
+    max_audio_mb: float = 20.0
+
+    # ── Rate limiting ───────────────────────────────────────
+    rate_limit_per_minute: int = 30
+
     @property
     def cors_origins(self) -> list[str]:
         """Parse comma-separated origins into a list."""

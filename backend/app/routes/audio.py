@@ -13,6 +13,11 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from app.models.schemas import AudioContext, ErrorResponse, ProcessedResponse
 from app.services.gemini import process_audio
+from app.services.metrics import (
+    AUDIO_BYTES,
+    PROCESS_AUDIO_DURATION,
+    PROCESS_AUDIO_TOTAL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +29,8 @@ router = APIRouter(tags=["audio"])
     response_model=ProcessedResponse,
     responses={
         400: {"model": ErrorResponse, "description": "Invalid request"},
-        413: {"model": ErrorResponse, "description": "Audio file too large"},        500: {"model": ErrorResponse, "description": "Processing error"},
+        413: {"model": ErrorResponse, "description": "Audio file too large"},
+        500: {"model": ErrorResponse, "description": "Processing error"},
         503: {"model": ErrorResponse, "description": "Gemini service unavailable"},
     },
     summary="Process dictated audio through Gemini AI",
@@ -93,32 +99,39 @@ async def process_audio_endpoint(
         audio_context.model_dump_json(),
     )
 
+    AUDIO_BYTES.observe(len(audio_bytes))
+
     # ── Process through Gemini ──────────────────────────────────────────────
     try:
-        result = await process_audio(
-            audio_bytes=audio_bytes,
-            filename=audio_file.filename or "audio.wav",
-            content_type=audio_file.content_type,
-            context=audio_context.model_dump(),
-        )
+        with PROCESS_AUDIO_DURATION.time():
+            result = await process_audio(
+                audio_bytes=audio_bytes,
+                filename=audio_file.filename or "audio.wav",
+                content_type=audio_file.content_type,
+                context=audio_context.model_dump(),
+            )
     except ValueError as e:
         # File too large or invalid format
+        PROCESS_AUDIO_TOTAL.labels(outcome="error").inc()
         logger.warning("Audio validation error: %s", e)
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=str(e),
         ) from e
     except RuntimeError as e:
+        PROCESS_AUDIO_TOTAL.labels(outcome="error").inc()
         logger.error("Gemini processing error: %s", e)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),
         ) from e
     except Exception as e:
+        PROCESS_AUDIO_TOTAL.labels(outcome="error").inc()
         logger.error("Unexpected error processing audio: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Processing failed: {e}",
         ) from e
 
+    PROCESS_AUDIO_TOTAL.labels(outcome="success").inc()
     return ProcessedResponse(**result)
