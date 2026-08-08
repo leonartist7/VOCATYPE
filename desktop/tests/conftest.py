@@ -62,4 +62,3 @@ def _reset_api_client(monkeypatch):
 
     monkeypatch.setattr(api_client, "_client", None)
     yield
-

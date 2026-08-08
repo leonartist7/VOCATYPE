@@ -12,14 +12,13 @@ from __future__ import annotations
 
 import logging
 import threading
-from pathlib import Path
 
-from PIL import Image
-
+from app import autostart
 from app.api_client import close_client, send_audio
 from app.config import config
 from app.context import get_active_window_context
 from app.hotkey import HotkeyListener
+from app.icon import load_or_create_icon
 from app.injector import inject_text
 from app.recorder import AudioRecorder
 
@@ -37,6 +36,7 @@ logger = logging.getLogger("vocatype-desktop")
 recorder = AudioRecorder()
 _processing = False
 _processing_lock = threading.Lock()
+_tray_icon = None  # set once the tray icon is created
 
 
 def on_hotkey_press() -> None:
@@ -47,6 +47,7 @@ def on_hotkey_press() -> None:
             logger.warning("Still processing previous recording — ignoring press.")
             return
     recorder.start_recording()
+    _set_recording_state(True)
 
 
 def on_hotkey_release() -> None:
@@ -60,10 +61,26 @@ def on_hotkey_release() -> None:
         if _processing:
             return
         _processing = True
+    _set_recording_state(False)
 
     # Run processing in a background thread
     thread = threading.Thread(target=_process_recording, daemon=True)
     thread.start()
+
+
+def _set_recording_state(recording: bool) -> None:
+    """Reflect the recording state in the tray icon, if present."""
+    global _tray_icon
+    if _tray_icon is None:
+        return
+    try:
+        icon = load_or_create_icon(recording=recording)
+        _tray_icon.icon = icon
+        _tray_icon.title = (
+            "Vocatype — recording…" if recording else f"Vocatype ({config.hotkey_combo})"
+        )
+    except Exception as e:  # pragma: no cover — defensive; tray is optional
+        logger.warning("Failed to update tray icon: %s", e)
 
 
 def _process_recording() -> None:
@@ -113,18 +130,22 @@ def _create_tray_icon():
         logger.error("pystray not installed. Running without system tray.")
         return None
 
-    # Create a simple icon (solid colored square)
-    icon_path = Path(__file__).parent.parent / "icon.ico"
-    if icon_path.exists():
-        image = Image.open(icon_path)
-    else:
-        # Generate a simple purple square icon
-        image = Image.new("RGB", (64, 64), color=(127, 0, 255))
-
     def on_quit(icon, item):
         """Quit the application."""
         logger.info("Quit requested from tray menu.")
         icon.stop()
+
+    def on_auto_start_toggle(icon, item):
+        """Enable/disable launch-at-login."""
+        enabled = item.checked
+        if enabled:
+            autostart.disable()
+            logger.info("Auto-start disabled.")
+        else:
+            autostart.enable()
+            logger.info("Auto-start enabled.")
+        if _tray_icon is not None:
+            _tray_icon.update_menu()
 
     menu = pystray.Menu(
         pystray.MenuItem(
@@ -133,12 +154,18 @@ def _create_tray_icon():
             enabled=False,
         ),
         pystray.Menu.SEPARATOR,
+        pystray.MenuItem(
+            "Launch at login",
+            on_auto_start_toggle,
+            checked=lambda icon, item: autostart.is_enabled(),
+        ),
+        pystray.Menu.SEPARATOR,
         pystray.MenuItem("Quit", on_quit),
     )
 
     icon = pystray.Icon(
         name="vocatype",
-        icon=image,
+        icon=load_or_create_icon(recording=False),
         title=f"Vocatype ({config.hotkey_combo})",
         menu=menu,
     )
@@ -163,12 +190,13 @@ def main() -> None:
     hotkey_listener.start()
 
     # Start system tray (this blocks on the main thread)
-    tray_icon = _create_tray_icon()
+    global _tray_icon
+    _tray_icon = _create_tray_icon()
 
     try:
-        if tray_icon is not None:
+        if _tray_icon is not None:
             logger.info("System tray icon active. Right-click to quit.")
-            tray_icon.run()  # Blocks until icon.stop() is called
+            _tray_icon.run()  # Blocks until icon.stop() is called
         else:
             # Fallback: just wait for keyboard interrupt
             logger.info("Running without tray. Press Ctrl+C to quit.")
