@@ -19,10 +19,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prometheus `/metrics` endpoint and structured request logging.
 - JSON structured logging mode (`LOG_FORMAT=json`) for container/Cloud Run use.
 - Simple in-process rate limiting on the audio endpoint.
+- Desktop tray recording indicator: the tray icon turns red and the tooltip
+  shows "recording…" while the hotkey is held.
+- "Launch at login" system tray toggle (Windows VBS / macOS LaunchAgent /
+  Linux autostart desktop entry).
+- Dependency automation: Renovate config and Dependabot for pip and
+  GitHub Actions.
+- PyInstaller spec (`desktop/vocatype.spec`) for building the desktop client.
 
 ### Changed
 
 - Fixed `.gitignore` typo (`*.DS_Store5` → `*.DS_Store`).
+- Desktop API client now sends the configured API token as `X-API-Token`.
 
 ## [0.1.0] - 2026-08-07
 

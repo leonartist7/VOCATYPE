@@ -1,0 +1,29 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":disableDependencyDashboard"
+  ],
+  "packageRules": [
+    {
+      "matchManagers": ["pip_requirements"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "python dependencies",
+      "automerge": true
+    },
+    {
+      "matchManagers": ["pip_requirements"],
+      "matchUpdateTypes": ["major"],
+      "groupName": "python major upgrades",
+      "automerge": false
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions",
+      "automerge": true
+    }
+  ],
+  "timezone": "UTC",
+  "schedule": ["every monday"]
+}
