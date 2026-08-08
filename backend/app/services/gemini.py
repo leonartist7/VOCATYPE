@@ -1,8 +1,8 @@
 """
-Gemini 1.5 Flash integration — dynamic prompt construction and audio processing.
+Gemini Flash integration — dynamic prompt construction and audio processing.
 
-This module builds a context-aware system prompt, sends audio + prompt to Gemini,
-and parses the structured response.
+This module builds a context-aware system prompt, sends audio + prompt to Gemini
+via the official `google-genai` SDK, and parses the structured response.
 """
 
 from __future__ import annotations
@@ -11,10 +11,11 @@ import json
 import logging
 from typing import Any
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 from app.config import get_settings
-from app.services.transcription import detect_mime_type, prepare_audio_part, validate_audio_size
+from app.services.transcription import detect_mime_type, validate_audio_size
 
 logger = logging.getLogger(__name__)
 
@@ -186,16 +187,15 @@ def build_system_prompt(context: dict[str, Any]) -> str:
 
 # ── Gemini Client ──────────────────────────────────────────────────────────────
 
-_model: genai.GenerativeModel | None = None
+_client: genai.Client | None = None
 
 
 def initialize_gemini() -> None:
-    """Configure the Gemini SDK and create the model instance. Called once at startup."""
-    global _model
+    """Configure the Gemini SDK and create the client. Called once at startup."""
+    global _client
     settings = get_settings()
-    genai.configure(api_key=settings.gemini_api_key)
-    _model = genai.GenerativeModel(settings.gemini_model)
-    logger.info("Gemini initialized with model: %s", settings.gemini_model)
+    _client = genai.Client(api_key=settings.gemini_api_key)
+    logger.info("Gemini client initialized with model: %s", settings.gemini_model)
 
 
 async def process_audio(
@@ -220,8 +220,8 @@ async def process_audio(
         RuntimeError: If Gemini is not initialized or returns an unparseable response.
         ValueError: If audio is too large.
     """
-    if _model is None:
-        raise RuntimeError("Gemini model not initialized. Call initialize_gemini() first.")
+    if _client is None:
+        raise RuntimeError("Gemini client not initialized. Call initialize_gemini() first.")
 
     # Validate audio size
     validate_audio_size(audio_bytes)
@@ -240,10 +240,12 @@ async def process_audio(
     system_prompt = build_system_prompt(context)
     tone = _determine_tone(context.get("app_name", "unknown"))
 
-    # Prepare the multimodal content (system prompt + audio)
-    audio_part = prepare_audio_part(audio_bytes, mime_type)
+    # Prepare the multimodal content: system prompt (as instruction) + inline audio
+    audio_part = types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
+    settings = get_settings()
 
-    generation_config = genai.types.GenerationConfig(
+    generation_config = types.GenerateContentConfig(
+        system_instruction=system_prompt,
         temperature=0.1,  # Low temp for accurate transcription
         top_p=0.95,
         top_k=40,
@@ -251,24 +253,20 @@ async def process_audio(
     )
 
     try:
-        response = await _model.generate_content_async(
-            contents=[
-                system_prompt,
-                audio_part,
-            ],
-            generation_config=generation_config,
+        response = await _client.aio.models.generate_content(
+            model=settings.gemini_model,
+            contents=[audio_part],
+            config=generation_config,
         )
 
-        raw_text = response.text.strip()
+        raw_text = (response.text or "").strip()
         logger.debug("Gemini raw response: %s", raw_text[:200])
 
         # Parse the JSON response
-        result = _parse_gemini_response(raw_text, tone)
-        return result
+        return _parse_gemini_response(raw_text, tone)
 
     except json.JSONDecodeError as e:
         logger.error("Failed to parse Gemini JSON response: %s", e)
-        # If Gemini didn't return valid JSON, treat the whole response as processed text
         return {
             "processed_text": raw_text,
             "raw_transcript": raw_text,

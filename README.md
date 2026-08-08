@@ -25,7 +25,7 @@ even lets you edit selected text by voice ("make this more formal").
 ┌────────────────┐      audio + context       ┌──────────────────────┐
 │  Desktop app   │ ─────────────────────────► │    FastAPI backend   │
 │  (hotkey · mic │                             │  /process-audio      │
-│   · clipboard) │ ◄───────────────────────── │   Gemini 1.5 Flash   │
+│   · clipboard) │ ◄───────────────────────── │   Gemini Flash API   │
 └────────────────┘      cleaned text          └──────────────────────┘
        │                                             │
        │      Windows / macOS / Linux                │ Gemini API
@@ -88,7 +88,7 @@ docker run -p 8000:8080 -e GEMINI_API_KEY=your-key vocatype-backend
 | Variable | Default | Description |
 | --- | --- | --- |
 | `GEMINI_API_KEY` | — | Gemini API key (required) |
-| `GEMINI_MODEL` | `gemini-1.5-flash` | Model used for transcription |
+| `GEMINI_MODEL` | `gemini-flash-latest` | Model used for transcription (stable alias) |
 | `HOST` | `0.0.0.0` | Bind address |
 | `PORT` | `8000` | Bind port |
 | `ALLOWED_ORIGINS` | `*` | Comma-separated CORS origins |

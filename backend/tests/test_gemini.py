@@ -5,6 +5,8 @@ All tests mock the Gemini SDK; no network calls are made.
 
 from __future__ import annotations
 
+import pytest
+
 from app.services import gemini
 from app.services.gemini import (
     _determine_tone,
@@ -104,16 +106,18 @@ class TestParseGeminiResponse:
 
 
 class TestProcessAudioMocked:
-    """Integration of process_audio with a mocked Gemini model."""
+    """Integration of process_audio with a mocked Gemini client."""
 
     async def test_process_audio_returns_parsed_response(self, mocker) -> None:
-        fake_model = mocker.Mock()
-        fake_model.generate_content_async = mocker.AsyncMock()
-        fake_model.generate_content_async.return_value.text = (
+        fake_models = mocker.Mock()
+        fake_models.generate_content = mocker.AsyncMock()
+        fake_models.generate_content.return_value.text = (
             '{"processed_text": "Hello world.", "raw_transcript": "Um hello world."}'
         )
+        fake_client = mocker.Mock()
+        fake_client.aio.models = fake_models
 
-        mocker.patch.object(gemini, "_model", fake_model)
+        mocker.patch.object(gemini, "_client", fake_client)
         mocker.patch.object(
             gemini,
             "build_system_prompt",
@@ -130,13 +134,25 @@ class TestProcessAudioMocked:
         assert result["processed_text"] == "Hello world."
         assert result["raw_transcript"] == "Um hello world."
         assert result["tone_applied"] == "professional"
-        fake_model.generate_content_async.assert_awaited_once()
+        fake_models.generate_content.assert_awaited_once()
+
+        # The audio must be sent as an inline Part with the detected MIME type.
+        from app.config import get_settings
+
+        call_kwargs = fake_models.generate_content.await_args.kwargs
+        assert call_kwargs["model"] == get_settings().gemini_model
+        parts = call_kwargs["contents"]
+        assert len(parts) == 1
+        assert parts[0].inline_data.mime_type == "audio/wav"
+        assert parts[0].inline_data.data == b"\x00" * 100
+        # System prompt is passed as a config instruction, not user content.
+        assert call_kwargs["config"].system_instruction == "system prompt"
 
     async def test_process_audio_uninitialized_raises(self) -> None:
         import app.services.gemini as g
 
-        old = g._model
-        g._model = None
+        old = g._client
+        g._client = None
         try:
             try:
                 await g.process_audio(
@@ -150,10 +166,10 @@ class TestProcessAudioMocked:
             else:
                 raise AssertionError("Expected RuntimeError")
         finally:
-            g._model = old
+            g._client = old
 
     async def test_process_audio_oversized_raises_value_error(self, mocker) -> None:
-        mocker.patch.object(gemini, "_model", mocker.Mock())
+        mocker.patch.object(gemini, "_client", mocker.Mock())
         try:
             await gemini.process_audio(
                 audio_bytes=b"\x00" * (21 * 1024 * 1024),
@@ -165,3 +181,19 @@ class TestProcessAudioMocked:
             assert "too large" in str(e)
         else:
             raise AssertionError("Expected ValueError")
+
+    async def test_process_audio_api_error_wraps_runtime_error(self, mocker) -> None:
+        fake_models = mocker.Mock()
+        fake_models.generate_content = mocker.AsyncMock(side_effect=RuntimeError("quota exceeded"))
+        fake_client = mocker.Mock()
+        fake_client.aio.models = fake_models
+        mocker.patch.object(gemini, "_client", fake_client)
+        mocker.patch.object(gemini, "build_system_prompt", return_value="sys")
+
+        with pytest.raises(RuntimeError, match="Gemini processing failed"):
+            await gemini.process_audio(
+                audio_bytes=b"\x00" * 100,
+                filename="test.wav",
+                content_type="audio/wav",
+                context={},
+            )

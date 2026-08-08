@@ -7,7 +7,6 @@ import pytest
 from app.services.transcription import (
     _get_extension,
     detect_mime_type,
-    prepare_audio_part,
     validate_audio_size,
 )
 
@@ -73,14 +72,3 @@ class TestValidateAudioSize:
     def test_custom_limit(self) -> None:
         with pytest.raises(ValueError, match="too large"):
             validate_audio_size(b"\x00" * 2048, max_size_mb=0.001)
-
-
-class TestPrepareAudioPart:
-    def test_returns_inline_data_structure(self) -> None:
-        part = prepare_audio_part(b"\x00\x01", "audio/wav")
-        assert part == {
-            "inline_data": {
-                "mime_type": "audio/wav",
-                "data": b"\x00\x01",
-            }
-        }

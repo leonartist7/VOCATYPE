@@ -29,6 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Migrated from the deprecated `google-generativeai` SDK to the officially
+  supported `google-genai` package (client-based API, `generate_content`).
+- Default Gemini model is now `gemini-flash-latest` (stable alias); older
+  models like `gemini-1.5-flash` / `gemini-2.x` are unavailable to new
+  accounts.
 - Fixed `.gitignore` typo (`*.DS_Store5` → `*.DS_Store`).
 - Desktop API client now sends the configured API token as `X-API-Token`.
 

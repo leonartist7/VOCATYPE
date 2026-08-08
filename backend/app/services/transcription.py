@@ -95,28 +95,6 @@ def validate_audio_size(
     logger.debug("Audio size: %.2f MB (limit: %.0f MB)", size_mb, max_size_mb)
 
 
-def prepare_audio_part(
-    audio_bytes: bytes,
-    mime_type: str,
-) -> dict:
-    """
-    Prepare an inline audio part for the Gemini API.
-
-    Args:
-        audio_bytes: Raw audio data.
-        mime_type: MIME type string.
-
-    Returns:
-        Dict in the format expected by google-generativeai SDK inline_data.
-    """
-    return {
-        "inline_data": {
-            "mime_type": mime_type,
-            "data": audio_bytes,
-        }
-    }
-
-
 def _get_extension(filename: str) -> str:
     """Extract lowercase file extension including the dot."""
     dot_idx = filename.rfind(".")
