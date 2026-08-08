@@ -58,7 +58,9 @@ uvicorn app.main:app --reload
 
 The API is now at `http://localhost:8000`, with the interactive Web Studio at
 [http://localhost:8000/preview](http://localhost:8000/preview) and API docs at
-[http://localhost:8000/docs](http://localhost:8000/docs).
+[http://localhost:8000/docs](http://localhost:8000/docs). If `API_TOKEN` is set
+on the backend, enter it in the token field in the preview header (it is saved
+in your browser).
 
 ### 2. Desktop client
 

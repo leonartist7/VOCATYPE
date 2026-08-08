@@ -85,7 +85,7 @@ app = FastAPI(
         "transcribes via Gemini 1.5 Flash, strips filler words, "
         "adapts tone, and returns clean formatted text."
     ),
-    version="1.0.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 

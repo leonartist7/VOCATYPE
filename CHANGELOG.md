@@ -26,9 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dependency automation: Renovate config and Dependabot for pip and
   GitHub Actions.
 - PyInstaller spec (`desktop/vocatype.spec`) for building the desktop client.
+- Web Studio `/preview` now has an optional API token field (persisted in
+  localStorage) so it works when `/process-audio` auth is enabled.
 
 ### Changed
 
+- API version aligned to `0.2.0`.
 - Migrated from the deprecated `google-generativeai` SDK to the officially
   supported `google-genai` package (client-based API, `generate_content`).
 - Default Gemini model is now `gemini-flash-latest` (stable alias); older

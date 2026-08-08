@@ -146,6 +146,22 @@
       border-color: rgba(255, 255, 255, 0.2);
     }
 
+    .token-input {
+      width: 140px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      padding: 0.4rem 0.7rem;
+      color: var(--text-main);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+    }
+
+    .token-input:focus {
+      outline: none;
+      border-color: var(--accent-primary);
+    }
+
     /* Grid Layout */
     .grid {
       display: grid;
@@ -449,6 +465,7 @@
         </div>
       </div>
       <div class="header-actions">
+        <input type="text" id="apiTokenInput" class="token-input" placeholder="API Token (optional)" title="X-API-Token for /process-audio">
         <div class="status-badge">
           <div class="status-dot"></div>
           <span>Backend Online</span>
@@ -558,6 +575,13 @@
     const uploadBtn = document.getElementById('uploadBtn');
     const sampleBtn = document.getElementById('sampleBtn');
     const latencySpan = document.getElementById('latencySpan');
+    const apiTokenInput = document.getElementById('apiTokenInput');
+
+    // API token: persisted per browser so /process-audio works with auth enabled.
+    apiTokenInput.value = localStorage.getItem('vocatypeApiToken') || '';
+    apiTokenInput.addEventListener('change', () => {
+      localStorage.setItem('vocatypeApiToken', apiTokenInput.value.trim());
+    });
 
     // App Preset Switcher
     document.querySelectorAll('.preset-chip').forEach(chip => {
@@ -696,9 +720,16 @@
         language: 'en'
       }));
 
+      const headers = {};
+      const token = apiTokenInput.value.trim();
+      if (token) {
+        headers['X-API-Token'] = token;
+      }
+
       try {
         const res = await fetch('/process-audio', {
           method: 'POST',
+          headers,
           body: formData
         });
 
