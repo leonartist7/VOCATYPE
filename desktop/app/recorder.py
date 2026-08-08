@@ -1,11 +1,15 @@
 """
-Microphone audio recorder using PyAudio.
+Microphone audio recorder using sounddevice.
+
 Records PCM audio into an in-memory WAV buffer while a hotkey is held.
+
+`sounddevice` bundles its own PortAudio binaries, so it installs cleanly on
+modern Python versions (including 3.13+) where the PyAudio package provides
+no binary wheels.
 """
 
 from __future__ import annotations
 
-import contextlib
 import importlib
 import io
 import logging
@@ -30,25 +34,22 @@ class AudioRecorder:
     """
 
     def __init__(self) -> None:
-        self._pyaudio: Any = None
-        self._pa: Any | None = None
+        self._sounddevice: Any = None
         self._stream: Any | None = None
         self._frames: list[bytes] = []
         self._is_recording = False
         self._lock = threading.Lock()
 
-    def _ensure_pyaudio(self) -> Any:
-        """Lazily initialize PyAudio.
+    def _ensure_sounddevice(self) -> Any:
+        """Lazily import sounddevice.
 
-        PyAudio is imported lazily so the app (and its test suite) can start
-        even when the native PortAudio dependency is unavailable on a given
+        The import is deferred so the app (and its test suite) can start even
+        when the native PortAudio dependency is unavailable on a given
         platform / Python version.
         """
-        if self._pa is None:
-            pyaudio = importlib.import_module("pyaudio")
-            self._pyaudio = pyaudio
-            self._pa = pyaudio.PyAudio()
-        return self._pa
+        if self._sounddevice is None:
+            self._sounddevice = importlib.import_module("sounddevice")
+        return self._sounddevice
 
     def start_recording(self) -> None:
         """Start capturing microphone audio."""
@@ -58,19 +59,17 @@ class AudioRecorder:
                 return
 
             self._frames = []
-            pa = self._ensure_pyaudio()
-            pyaudio = self._pyaudio
+            sd = self._ensure_sounddevice()
 
             try:
-                self._stream = pa.open(
-                    format=pyaudio.paInt16,
+                self._stream = sd.RawInputStream(
+                    samplerate=config.sample_rate,
                     channels=config.channels,
-                    rate=config.sample_rate,
-                    input=True,
-                    frames_per_buffer=config.chunk_size,
-                    stream_callback=self._audio_callback,
+                    dtype="int16",  # matches sample_width = 2
+                    blocksize=config.chunk_size,
+                    callback=self._audio_callback,
                 )
-                self._stream.start_stream()
+                self._stream.start()
                 self._is_recording = True
                 logger.info(
                     "🎙️  Recording started (rate=%d, channels=%d)",
@@ -115,15 +114,16 @@ class AudioRecorder:
 
     def _audio_callback(
         self,
-        in_data: bytes | None,
-        frame_count: int,
+        indata: bytes | Any,
+        frames: int,
         time_info: dict,
         status_flags: int,
-    ) -> tuple[None, int]:
-        """PyAudio callback — accumulates audio frames."""
-        if in_data and self._is_recording:
-            self._frames.append(in_data)
-        return (None, self._pyaudio.paContinue)
+    ) -> None:
+        """sounddevice RawInputStream callback — accumulates raw PCM frames."""
+        if indata and self._is_recording:
+            self._frames.append(bytes(indata))
+        if status_flags:
+            logger.debug("Audio callback status: %s", status_flags)
 
     def _frames_to_wav(self) -> bytes:
         """Convert accumulated PCM frames to a WAV file in memory."""
@@ -139,8 +139,8 @@ class AudioRecorder:
         """Safely close the audio stream."""
         if self._stream is not None:
             try:
-                if self._stream.is_active():
-                    self._stream.stop_stream()
+                if self._stream.active:
+                    self._stream.stop()
                 self._stream.close()
             except Exception as e:
                 logger.debug("Stream cleanup error (non-fatal): %s", e)
@@ -148,11 +148,7 @@ class AudioRecorder:
                 self._stream = None
 
     def cleanup(self) -> None:
-        """Release all PyAudio resources. Call on shutdown."""
+        """Release all audio resources. Call on shutdown."""
         with self._lock:
             self._cleanup_stream()
-            if self._pa is not None:
-                with contextlib.suppress(Exception):
-                    self._pa.terminate()
-                self._pa = None
             logger.info("AudioRecorder resources released.")

@@ -9,49 +9,61 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def _stub_pyaudio(monkeypatch):
-    """Provide a stub `pyaudio` module so tests run without native PortAudio.
+def _stub_sounddevice(monkeypatch):
+    """Provide a stub `sounddevice` module so tests run without native PortAudio.
 
-    The real `app.recorder` lazily imports pyaudio, but providing a lightweight
-    stub makes tests hermetic and platform-independent.
+    The real `app.recorder` lazily imports sounddevice, but providing a
+    lightweight stub makes tests hermetic and platform-independent.
     """
-    stub = types.ModuleType("pyaudio")
-
-    class _StubPyAudio:
-        def __init__(self):
-            self.stream = None
-
-        def open(self, *args, **kwargs):
-            stream = _StubStream()
-            self.stream = stream
-            return stream
-
-        def terminate(self):
-            pass
+    stub = types.ModuleType("sounddevice")
 
     class _StubStream:
-        def __init__(self):
+        def __init__(
+            self,
+            samplerate=None,
+            blocksize=None,
+            device=None,
+            channels=None,
+            dtype=None,
+            latency=None,
+            extra_settings=None,
+            callback=None,
+            finished_callback=None,
+            **kwargs,
+        ):
             self._active = False
+            self.callback = callback
+            self.kwargs = {
+                "samplerate": samplerate,
+                "blocksize": blocksize,
+                "channels": channels,
+                "dtype": dtype,
+                "callback": callback,
+            }
 
-        def start_stream(self):
+        @property
+        def active(self):
+            return self._active
+
+        def start(self):
             self._active = True
 
-        def stop_stream(self):
+        def stop(self):
             self._active = False
 
         def close(self):
             self._active = False
 
-        def is_active(self):
-            return self._active
+    last_open = {}
 
-    stub.PyAudio = _StubPyAudio
-    stub.Stream = _StubStream
-    stub.paInt16 = 8
-    stub.paContinue = 1
-    stub.paComplete = 0
+    def _open(**kwargs):
+        last_open.update(kwargs)
+        return _StubStream(**kwargs)
 
-    monkeypatch.setitem(sys.modules, "pyaudio", stub)
+    stub.RawInputStream = _open
+    stub.last_open = last_open
+
+    monkeypatch.setitem(sys.modules, "sounddevice", stub)
     yield stub
 
 

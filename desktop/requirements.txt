@@ -3,7 +3,9 @@
 pynput>=1.7.6
 
 # Audio recording
-pyaudio>=0.2.14
+# sounddevice bundles PortAudio binaries (wheels for all Python versions,
+# including 3.13+) — unlike pyaudio which has no binary wheels on modern Python.
+sounddevice>=0.5.0
 
 # Text injection
 pyautogui>=0.9.54

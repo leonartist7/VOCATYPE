@@ -1,13 +1,33 @@
-"""Unit tests for the desktop audio recorder (PyAudio stubbed)."""
+"""Unit tests for the desktop audio recorder (sounddevice stubbed)."""
 
 from __future__ import annotations
 
+import io
 import wave
 
+from app.config import config
 from app.recorder import AudioRecorder
 
 
 class TestAudioRecorder:
+    def test_stream_configured_from_config(self) -> None:
+        """RawInputStream must be opened with the configured audio params."""
+        import sounddevice
+
+        rec = AudioRecorder()
+        rec.start_recording()
+
+        opened = sounddevice.last_open
+        assert opened["samplerate"] == config.sample_rate
+        assert opened["channels"] == config.channels
+        assert opened["dtype"] == "int16"
+        assert opened["blocksize"] == config.chunk_size
+        assert opened["callback"].__self__ is rec
+        assert opened["callback"].__func__ is AudioRecorder._audio_callback
+        assert rec._stream.active is True
+
+        rec.cleanup()
+
     def test_start_and_stop_recording_produces_wav(self) -> None:
         rec = AudioRecorder()
         rec.start_recording()
@@ -20,7 +40,6 @@ class TestAudioRecorder:
         assert len(wav_bytes) > 44  # WAV header + data
 
         # Validate it is a readable WAV file
-        import io
 
         with wave.open(io.BytesIO(wav_bytes), "rb") as wf:
             assert wf.getnchannels() == 1
@@ -52,5 +71,5 @@ class TestAudioRecorder:
         rec = AudioRecorder()
         rec.start_recording()
         rec.cleanup()
-        assert rec._pa is None
+        assert rec._sounddevice is not None
         assert rec._stream is None
