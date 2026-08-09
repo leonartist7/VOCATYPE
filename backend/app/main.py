@@ -1,7 +1,8 @@
 """
 Vocatype Backend — FastAPI Application Entry Point.
 
-Initializes the transcription engine on startup, configures CORS and security
+Initializes the transcription stack on startup (faster-whisper locally, plus
+the DeepSeek cleaning client in online mode), configures CORS and security
 middleware, mounts the audio processing route, and exposes observability
 endpoints (health, metrics).
 """
@@ -20,7 +21,6 @@ from fastapi.responses import HTMLResponse
 from app.config import get_settings
 from app.middleware import SecurityMiddleware
 from app.routes.audio import router as audio_router
-from app.services.gemini import initialize_gemini
 from app.services.metrics import content_type, metrics_enabled, render_metrics
 
 # ── Logging ─────────────────────────────────────────────────────────────────────
@@ -64,23 +64,26 @@ logger = logging.getLogger("vocatype")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
-    engine = settings.transcription_engine
-    logger.info("🚀 Vocatype backend starting up (engine=%s)…", engine)
+    mode = settings.transcription_mode
+    logger.info("🚀 Vocatype backend starting up (mode=%s)…", mode)
 
-    if engine == "whisper":
-        from app.services.whisper import _load_model
+    # Whisper STT is the engine in both modes — pre-warm it.
+    from app.services.whisper import _load_model
 
-        try:
-            _load_model()
-            logger.info("✅ Whisper model ready (model=%s)", settings.whisper_model)
-        except Exception as exc:
-            logger.warning("⚠ Whisper model not available at startup: %s", exc)
-    else:
-        if not settings.gemini_api_key:
-            logger.error("GEMINI_API_KEY is empty — Gemini engine cannot start.")
-            raise RuntimeError("GEMINI_API_KEY is required when TRANSCRIPTION_ENGINE=gemini.")
-        initialize_gemini()
-        logger.info("✅ Gemini client initialized (model=%s)", settings.gemini_model)
+    try:
+        _load_model()
+        logger.info("✅ Whisper model ready (model=%s)", settings.whisper_model)
+    except Exception as exc:
+        logger.warning("⚠ Whisper model not available at startup: %s", exc)
+
+    if settings.is_online:
+        if not settings.deepseek_api_key:
+            logger.error("DEEPSEEK_API_KEY is empty — online mode cannot clean text.")
+            raise RuntimeError("DEEPSEEK_API_KEY is required when TRANSCRIPTION_MODE=online.")
+        from app.services.deepseek import initialize_deepseek
+
+        initialize_deepseek()
+        logger.info("✅ DeepSeek client initialized (model=%s)", settings.deepseek_model)
 
     yield  # App is running
 
@@ -92,11 +95,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Vocatype API",
     description=(
-        "AI-powered dictation backend. Accepts audio recordings, "
-        "transcribes via Gemini (cloud) or faster-whisper (offline), "
-        "strips filler words (Gemini), adapts tone, and returns clean formatted text."
+        "AI-powered dictation backend. Transcribes audio locally with "
+        "faster-whisper (offline), then — in online mode — cleans the text "
+        "with DeepSeek V4 Flash: punctuation, filler-word removal, tone."
     ),
-    version="0.2.0",
+    version="0.3.0",
     lifespan=lifespan,
 )
 
@@ -138,16 +141,15 @@ async def preview_page():
 @app.get("/health", tags=["system"])
 async def health_check():
     """Health check endpoint for Cloud Run / load balancers."""
-    engine = settings.transcription_engine
+    mode = settings.transcription_mode
     response: dict[str, str] = {
         "status": "healthy",
         "service": "vocatype-backend",
-        "engine": engine,
+        "mode": mode,
+        "whisper_model": settings.whisper_model,
     }
-    if engine == "whisper":
-        response["model"] = settings.whisper_model
-    else:
-        response["model"] = settings.gemini_model
+    if settings.is_online:
+        response["cleaner"] = settings.deepseek_model
     return response
 
 

@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Offline speech-to-text via `faster-whisper` (`tiny.en` by default) — audio never
+  leaves the machine in offline mode.
+- Online text cleaning via **DeepSeek V4 Flash** (`deepseek-v4-flash`): whisper
+  transcribes locally, DeepSeek adds punctuation and fixes grammar in online mode.
+- `TRANSCRIPTION_MODE` config (`online` / `offline`) plus a per-request
+  `X-Transcription-Mode` header override (used by the Web Studio toggle).
+- New services: `app/services/whisper.py`, `app/services/deepseek.py`,
+  `app/services/prompts.py` (tone detection + prompt builder shared with tests).
+- Web Studio redesign: online/offline mode switch, live backend status, pipeline
+  indicator, tone chips, raw transcript, latency readout.
 - Repository foundation: README, LICENSE (Apache-2.0), CONTRIBUTING, CHANGELOG.
 - Ruff lint configuration for `backend/` and `desktop/`.
 - Unit test suites for the backend (transcription, schemas, Gemini service, audio route)
@@ -31,16 +41,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- API version aligned to `0.2.0`.
-- Migrated from the deprecated `google-generativeai` SDK to the officially
-  supported `google-genai` package (client-based API, `generate_content`).
-- Default Gemini model is now `gemini-flash-latest` (stable alias); older
-  models like `gemini-1.5-flash` / `gemini-2.x` are unavailable to new
-  accounts.
+- Replaced Gemini (multimodal transcription) with whisper local STT + DeepSeek
+  cleaning: cheaper, faster, and fully offline-capable.
+- API version aligned to `0.3.0`.
+- WebM/OGG/MP3 uploads now decoded via PyAV in `whisper.py` (previously the
+  WAV-only path rejected them).
 - Desktop microphone recording now uses `sounddevice` (bundles PortAudio
   binaries) instead of PyAudio, which has no binary wheels on Python 3.13+.
 - Fixed `.gitignore` typo (`*.DS_Store5` → `*.DS_Store`).
 - Desktop API client now sends the configured API token as `X-API-Token`.
+- PyInstaller spec collects `_sounddevice_data` (PortAudio DLLs) and the tray
+  "launch at login" checked state uses the correct `lambda item:` signature.
 
 ## [0.1.0] - 2026-08-07
 

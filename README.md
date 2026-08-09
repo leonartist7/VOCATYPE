@@ -10,33 +10,39 @@ even lets you edit selected text by voice ("make this more formal").
 ## Features
 
 - 🎙️ **Push-to-talk dictation** — hold the hotkey, speak, release, done.
-- 🧠 **AI cleaning** — filler words removed, grammar fixed, lists and paragraphs auto-formatted.
+- ⚡ **Local speech-to-text** — faster-whisper runs on your machine, no audio leaves it.
+- 🧠 **Online cleaning (optional)** — DeepSeek V4 Flash adds punctuation, fixes grammar,
+  strips filler words — a fraction of a cent per dictation.
+- 🚫 **Full offline mode** — flip to offline and dictation keeps working with zero internet.
 - 🎭 **Context-aware tone** — automatically matches the app you're dictating into.
 - ✏️ **Speak-to-edit** — select text, speak a command, and watch it transform.
 - 🌍 **Multilingual** — transcribes and processes in the spoken language.
 - 🖥️ **Desktop client** — Windows/macOS/Linux with a system-tray presence.
-- 🌐 **Web Studio** — record and test from the browser at `/preview`.
+- 🌐 **Web Studio** — record and test from the browser at `/preview` with a live
+  online/offline toggle.
 - 🔌 **FastAPI backend** — single self-hostable service, deploys to Cloud Run or Docker.
 - 📱 **Android** (WIP) — dictation on the go.
 
 ## Architecture
 
 ```
-┌────────────────┐      audio + context       ┌──────────────────────┐
-│  Desktop app   │ ─────────────────────────► │    FastAPI backend   │
-│  (hotkey · mic │                             │  /process-audio      │
-│   · clipboard) │ ◄───────────────────────── │   Gemini Flash API   │
-└────────────────┘      cleaned text          └──────────────────────┘
-       │                                             │
-       │      Windows / macOS / Linux                │ Gemini API
-       │                                            ▼
-       │                          ┌──────────────────────────┐
-       │                          │   Web Studio (preview)   │
-       │                          └──────────────────────────┘
+┌────────────────┐      audio + context       ┌──────────────────────────┐
+│  Desktop app   │ ─────────────────────────► │      FastAPI backend     │
+│  (hotkey · mic │                             │  /process-audio          │
+│   · clipboard) │ ◄───────────────────────── │  ⚡ whisper (local STT)  │
+└────────────────┘      cleaned text          │  ✨ DeepSeek (online)    │
+       │                                      └──────────────────────────┘
+       │      Windows / macOS / Linux                    │
+       │                                                 │ offline: whisper only
+       ▼                                                 │ online: + DeepSeek V4 Flash
+┌──────────────────────────┐
+│   Web Studio (preview)   │
+│   online ⇄ offline toggle│
+└──────────────────────────┘
 ```
 
 ```
-backend/    FastAPI service — Gemini integration, tone/prompt engine, Web Studio
+backend/    FastAPI service — whisper STT, DeepSeek cleaning, tone/prompt engine, Web Studio
 desktop/    Python desktop client — hotkey, recording, window context, text injection
 android/    Android client (in progress)
 ```
@@ -45,14 +51,16 @@ android/    Android client (in progress)
 
 ### 1. Backend
 
-Prerequisites: Python 3.12+, a [Gemini API key](https://aistudio.google.com/app/apikey).
+Prerequisites: Python 3.12+, a microphone.
 
 ```bash
 cd backend
 python -m venv .venv
 # Windows: .venv\Scripts\activate   |   macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env        # add your GEMINI_API_KEY
+cp .env.example .env
+# For online mode (recommended): set DEEPSEEK_API_KEY
+# For pure offline: set TRANSCRIPTION_MODE=offline
 uvicorn app.main:app --reload
 ```
 
@@ -61,6 +69,9 @@ The API is now at `http://localhost:8000`, with the interactive Web Studio at
 [http://localhost:8000/docs](http://localhost:8000/docs). If `API_TOKEN` is set
 on the backend, enter it in the token field in the preview header (it is saved
 in your browser).
+
+**First run** downloads the whisper model (~39 MB for `tiny.en`) from
+HuggingFace and caches it locally — after that, transcription is fully offline.
 
 ### 2. Desktop client
 
@@ -82,15 +93,21 @@ Press **Ctrl+Space** (configurable via `HOTKEY_COMBO`), hold to speak, release t
 ```bash
 cd backend
 docker build -t vocatype-backend .
-docker run -p 8000:8080 -e GEMINI_API_KEY=your-key vocatype-backend
+docker run -p 8000:8080 -e DEEPSEEK_API_KEY=your-key vocatype-backend
 ```
 
 ## Configuration
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `GEMINI_API_KEY` | — | Gemini API key (required) |
-| `GEMINI_MODEL` | `gemini-flash-latest` | Model used for transcription (stable alias) |
+| `TRANSCRIPTION_MODE` | `online` | `online` = whisper + DeepSeek cleaning; `offline` = whisper only |
+| `DEEPSEEK_API_KEY` | — | DeepSeek API key (required in `online` mode) |
+| `DEEPSEEK_MODEL` | `deepseek-v4-flash` | DeepSeek model for text cleaning |
+| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | DeepSeek OpenAI-compatible endpoint |
+| `WHISPER_MODEL` | `tiny.en` | faster-whisper model (e.g. `tiny`, `base`, `small`) |
+| `WHISPER_DEVICE` | `auto` | `cpu`, `cuda`, or `auto` |
+| `WHISPER_COMPUTE_TYPE` | `auto` | `int8`, `float16`, `float32`, or `auto` |
+| `API_TOKEN` | — | Require this token as `X-API-Token` on `/process-audio` |
 | `HOST` | `0.0.0.0` | Bind address |
 | `PORT` | `8000` | Bind port |
 | `ALLOWED_ORIGINS` | `*` | Comma-separated CORS origins |

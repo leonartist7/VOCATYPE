@@ -1,5 +1,5 @@
 """
-Audio format detection and preparation for Gemini multimodal input.
+Audio format detection and preparation for the transcription pipeline.
 Handles WAV, M4A, WebM, OGG, and other common audio formats.
 """
 
@@ -10,7 +10,7 @@ import mimetypes
 
 logger = logging.getLogger(__name__)
 
-# Mapping of file extensions to MIME types Gemini accepts
+# Mapping of file extensions to MIME types accepted by the pipeline
 SUPPORTED_MIME_TYPES: dict[str, str] = {
     ".wav": "audio/wav",
     ".wave": "audio/wav",
@@ -42,7 +42,7 @@ def detect_mime_type(filename: str, content_type: str | None = None) -> str:
         content_type: Optional MIME type from the upload header.
 
     Returns:
-        A MIME type string suitable for the Gemini API.
+        A MIME type string suitable for the audio processing pipeline.
     """
     # 1. Check extension against our map
     if filename:

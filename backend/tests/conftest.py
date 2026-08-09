@@ -6,7 +6,7 @@ import os
 
 import pytest
 
-os.environ.setdefault("GEMINI_API_KEY", "test-key")
+os.environ.setdefault("DEEPSEEK_API_KEY", "test-key")
 
 
 @pytest.fixture(autouse=True)

@@ -54,7 +54,8 @@ Run all three locally before pushing. CI will block merges that fail.
 ### Testing
 
 - Tests live in `backend/tests/` and `desktop/tests/`, mirrored to the package layout.
-- Never hit the real Gemini API in tests — mock `app.services.gemini._model`.
+- Never hit the real DeepSeek or whisper models in tests — mock
+  `app.services.deepseek._client` and the whisper pipeline instead.
 - Cover the happy path plus the error branches (invalid JSON, empty audio, oversized file).
 
 ### Commits

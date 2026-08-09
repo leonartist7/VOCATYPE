@@ -5,6 +5,8 @@ from __future__ import annotations
 import io
 import wave
 
+import pytest
+
 
 def _make_silent_wav_bytes(duration_seconds: float = 0.5) -> bytes:
     """Generate a valid WAV in memory (16 kHz, mono, 16-bit PCM)."""
@@ -103,3 +105,46 @@ class TestWhisperService:
         transcribe(_make_silent_wav_bytes(0.3), language="auto")
         _, kwargs = fake.transcribe.call_args
         assert kwargs["language"] is None
+
+
+def _make_silent_webm_bytes() -> bytes:
+    """Generate a tiny valid webm (Opus audio) in memory via PyAV."""
+    import av
+
+    buf = io.BytesIO()
+    container = av.open(buf, "w", format="webm")
+    stream = container.add_stream("libopus", rate=16000)
+    stream.layout = "mono"
+
+    import numpy as np
+
+    frame = av.AudioFrame.from_ndarray(
+        np.zeros((1, 1600), dtype=np.int16), format="s16", layout="mono"
+    )
+    frame.sample_rate = 16000
+    for packet in stream.encode(frame):
+        container.mux(packet)
+    for packet in stream.encode(None):
+        container.mux(packet)
+    container.close()
+    return buf.getvalue()
+
+
+class TestWhisperDecode:
+    def test_webm_falls_back_to_pyav(self, mocker):
+        """Non-WAV containers are decoded via PyAV before transcription."""
+        _patch_whisper_model(mocker)
+
+        from app.services.whisper import transcribe
+
+        webm = _make_silent_webm_bytes()
+        result = transcribe(webm)
+        assert result == "hello world"
+
+    def test_garbage_bytes_raise_value_error(self, mocker):
+        _patch_whisper_model(mocker)
+
+        from app.services.whisper import transcribe
+
+        with pytest.raises(ValueError):
+            transcribe(b"\x00\x01\x02not-an-audio-file")

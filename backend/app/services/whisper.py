@@ -4,6 +4,9 @@ Local offline transcription via faster-whisper (CTranslate2).
 Uses a lazily-loaded, module-level singleton so the model is shared across
 requests. The first transcription call downloads the model from HuggingFace
 (~39 MB for "tiny.en") and caches it locally; subsequent calls are instant.
+
+Decodes both WAV (stdlib) and compressed audio like webm/ogg/mp3 via PyAV,
+so browser recordings work out of the box.
 """
 
 from __future__ import annotations
@@ -44,21 +47,62 @@ def _load_model() -> WhisperModel:
     return _model
 
 
+def _decode_audio(audio_bytes: bytes) -> np.ndarray:
+    """
+    Decode audio bytes to a float32 numpy array at 16 kHz mono.
+
+    Fast path: WAV via the stdlib. Fallback: any container PyAV supports
+    (webm, ogg, mp3, m4a) resampled to 16 kHz mono.
+    """
+    # ── Fast path: WAV ──
+    try:
+        with io.BytesIO(audio_bytes) as buf, wave.open(buf, "rb") as wf:
+            if wf.getframerate() == 16000 and wf.getnchannels() == 1:
+                frames = wf.readframes(wf.getnframes())
+                return np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+    except wave.Error:
+        pass  # Not a WAV — fall through to PyAV
+
+    # ── Fallback: PyAV (webm/ogg/mp3/etc.) ──
+    import av
+    import av.audio.resampler
+
+    container = av.open(io.BytesIO(audio_bytes))
+    stream = next((s for s in container.streams if s.type == "audio"), None)
+    if stream is None:
+        raise ValueError("No audio stream found in uploaded file.")
+
+    resampler = av.audio.resampler.AudioResampler(format="fltp", layout="mono", rate=16000)
+    chunks: list[np.ndarray] = []
+    for frame in container.decode(stream):
+        for out_frame in resampler.resample(frame):
+            arr = out_frame.to_ndarray()
+            chunks.append(arr.reshape(-1))
+
+    # Flush any remaining buffered frames by resampling with no input.
+    for out_frame in resampler.resample(None):
+        arr = out_frame.to_ndarray()
+        chunks.append(arr.reshape(-1))
+
+    if not chunks:
+        raise ValueError("No audio frames could be decoded from the uploaded file.")
+
+    return np.concatenate(chunks).astype(np.float32)
+
+
 def transcribe(audio_bytes: bytes, language: str = "en") -> str:
     """
-    Transcribe raw WAV audio bytes to text using the local whisper model.
+    Transcribe audio bytes to text using the local whisper model.
 
     Args:
-        audio_bytes: Raw WAV file bytes (16 kHz, mono, 16-bit PCM).
-        language: ISO 639-1 language code hint (default "en").
+        audio_bytes: Raw audio file bytes (WAV, webm, ogg, mp3, …).
+        language: ISO 639-1 language code hint (default "en"). Use "auto"
+            for automatic language detection.
 
     Returns:
         Transcription text with no punctuation / filler-word processing.
     """
-    with io.BytesIO(audio_bytes) as buf, wave.open(buf, "rb") as wf:
-        frames = wf.readframes(wf.getnframes())
-
-    audio = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+    audio = _decode_audio(audio_bytes)
 
     model = _load_model()
     segments, info = model.transcribe(

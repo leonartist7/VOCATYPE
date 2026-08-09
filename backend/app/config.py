@@ -17,20 +17,22 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    # ── Transcription engine ────────────────────────────────
-    # "gemini" (default) or "whisper" (offline / local)
-    transcription_engine: str = "gemini"
+    # ── Transcription mode ──────────────────────────────────
+    # "offline": local faster-whisper only (no internet needed).
+    # "online":  whisper STT + DeepSeek text cleaning (punctuation, tone).
+    transcription_mode: str = "online"
 
-    # ── Whisper (local offline transcription) ────────────────
+    # ── Whisper (local offline STT) ─────────────────────────
     # "tiny.en" (39 MB, fastest), "base.en" (74 MB), "small.en" (483 MB)
     whisper_model: str = "tiny.en"
     whisper_device: str = "auto"  # "auto", "cpu", or "cuda"
     whisper_compute_type: str = "auto"  # "auto", "int8", "float16", etc.
 
-    # ── Gemini ──────────────────────────────────────────────
-    # Required when transcription_engine is "gemini".
-    gemini_api_key: str = ""
-    gemini_model: str = "gemini-flash-latest"
+    # ── DeepSeek (online text cleaning) ─────────────────────
+    # Required when transcription_mode is "online".
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-v4-flash"
+    deepseek_base_url: str = "https://api.deepseek.com"
 
     # ── Server ──────────────────────────────────────────────
     host: str = "0.0.0.0"
@@ -59,6 +61,11 @@ class Settings(BaseSettings):
         if self.allowed_origins.strip() == "*":
             return ["*"]
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+
+    @property
+    def is_online(self) -> bool:
+        """Whether DeepSeek text cleaning is enabled."""
+        return self.transcription_mode.lower() == "online"
 
 
 @lru_cache

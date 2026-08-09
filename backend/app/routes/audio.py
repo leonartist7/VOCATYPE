@@ -1,6 +1,12 @@
 """
 Audio processing endpoint.
 Accepts multipart audio + JSON context, returns AI-processed text.
+
+Pipeline:
+  1. faster-whisper transcribes the audio locally (works fully offline).
+  2. In online mode the raw transcript is sent to DeepSeek V4 Flash for
+     cleaning (punctuation, filler words, tone) — a few cents per million.
+  3. In offline mode the raw whisper transcript is returned as-is.
 """
 
 from __future__ import annotations
@@ -9,20 +15,33 @@ import json
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile, status
 
 from app.config import get_settings
 from app.models.schemas import AudioContext, ErrorResponse, ProcessedResponse
-from app.services.gemini import process_audio
+from app.services.deepseek import clean_transcript
 from app.services.metrics import (
     AUDIO_BYTES,
     PROCESS_AUDIO_DURATION,
     PROCESS_AUDIO_TOTAL,
 )
+from app.services.whisper import transcribe as whisper_transcribe
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["audio"])
+
+
+def _resolve_mode(settings, override: str | None) -> str:
+    """Resolve the effective transcription mode.
+
+    The client may override the configured mode per-request via the
+    X-Transcription-Mode header ("offline" or "online"). This lets the
+    preview UI offer a live offline/online toggle.
+    """
+    if override and override.lower() in {"offline", "online"}:
+        return override.lower()
+    return "offline" if not settings.is_online else "online"
 
 
 @router.post(
@@ -36,34 +55,33 @@ router = APIRouter(tags=["audio"])
     },
     summary="Process dictated audio",
     description=(
-        "Upload an audio file and a JSON context string. "
-        "If the backend is configured with `TRANSCRIPTION_ENGINE=whisper`, "
-        "audio is transcribed locally via faster-whisper (offline). "
-        "Otherwise the audio is sent to Gemini for transcription + tone adaptation."
+        "Transcribes audio locally with faster-whisper, then — in online mode — "
+        "cleans the text with DeepSeek V4 Flash (punctuation, fillers, tone). "
+        "Set X-Transcription-Mode to 'offline' or 'online' to override per request."
     ),
 )
 async def process_audio_endpoint(
     audio_file: Annotated[
         UploadFile,
-        File(description="Audio file (.wav, .m4a, .webm, .ogg, .mp3, .flac, .aac, .3gp)"),
+        File(description="Audio file (.wav, .webm, .ogg, .mp3, .m4a, .flac, .aac, .3gp)"),
     ],
     context: Annotated[
         str, Form(description="JSON string with keys: app_name, platform, selected_text, language")
     ] = "{}",
+    x_transcription_mode: Annotated[str | None, Header(alias="X-Transcription-Mode")] = None,
 ) -> ProcessedResponse:
     """
     Process an audio recording.
 
-    In **Gemini mode** (default): transcribes via Gemini, strips filler
-    words, adapts tone based on the active app, and returns clean formatted text.
+    **Offline mode** (default config): local faster-whisper transcription,
+    fully offline. Returns the raw transcript (no punctuation cleaning).
 
-    In **Whisper mode** (`TRANSCRIPTION_ENGINE=whisper`): transcribes locally
-    with faster-whisper — works fully offline. No tone adaptation or filler
-    removal is applied (the raw transcription is returned as both
-    `processed_text` and `raw_transcript`).
+    **Online mode**: same local transcription, then DeepSeek V4 Flash adds
+    punctuation, strips filler words, fixes grammar, and applies tone based
+    on the active app.
     """
     settings = get_settings()
-    engine = settings.transcription_engine
+    mode = _resolve_mode(settings, x_transcription_mode)
 
     # ── Parse context ───────────────────────────────────────────────────────
     try:
@@ -99,8 +117,8 @@ async def process_audio_endpoint(
         )
 
     logger.info(
-        "Received audio: engine=%s filename=%s size=%d bytes context=%s",
-        engine,
+        "Received audio: mode=%s filename=%s size=%d bytes context=%s",
+        mode,
         audio_file.filename,
         len(audio_bytes),
         audio_context.model_dump_json(),
@@ -108,18 +126,10 @@ async def process_audio_endpoint(
 
     AUDIO_BYTES.observe(len(audio_bytes))
 
-    # ── Dispatch to engine ──────────────────────────────────────────────────
+    # ── Process ─────────────────────────────────────────────────────────────
     try:
         with PROCESS_AUDIO_DURATION.time():
-            if engine == "whisper":
-                result = _process_whisper(audio_bytes, audio_context)
-            else:
-                result = await process_audio(
-                    audio_bytes=audio_bytes,
-                    filename=audio_file.filename or "audio.wav",
-                    content_type=audio_file.content_type,
-                    context=audio_context.model_dump(),
-                )
+            result = await _process(mode, audio_bytes, audio_context)
     except ValueError as e:
         PROCESS_AUDIO_TOTAL.labels(outcome="error").inc()
         logger.warning("Audio validation error: %s", e)
@@ -146,14 +156,19 @@ async def process_audio_endpoint(
     return ProcessedResponse(**result)
 
 
-def _process_whisper(audio_bytes: bytes, context: AudioContext) -> dict[str, str]:
-    """Transcribe locally with faster-whisper and return a Gemini-compatible dict."""
-    from app.services.whisper import transcribe as whisper_transcribe
+async def _process(mode: str, audio_bytes: bytes, audio_context: AudioContext) -> dict[str, str]:
+    """Run the transcription pipeline for the given mode."""
+    language = audio_context.language or "en"
 
-    language = context.language or "en"
-
+    # Always transcribe locally — whisper is the STT engine in both modes.
     transcript = whisper_transcribe(audio_bytes, language=language)
 
+    if mode == "online":
+        result = await clean_transcript(transcript, audio_context.model_dump())
+        result["raw_transcript"] = transcript
+        return result
+
+    # Offline: raw transcript, no LLM cleaning.
     return {
         "processed_text": transcript,
         "raw_transcript": transcript,
