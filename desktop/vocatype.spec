@@ -7,14 +7,22 @@
 
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_data_files
+
 app_root = Path(SPECPATH) / "app"
 
 a = Analysis(
     [str(app_root / "main.py")],
     pathex=[str(app_root)],
     binaries=[],
-    datas=[(str(app_root), "app")],
+    datas=(
+        # Bundle the PortAudio DLLs shipped with sounddevice — without these
+        # the packaged app cannot open a microphone stream.
+        collect_data_files("_sounddevice_data")
+        + [(str(app_root), "app")]
+    ),
     hiddenimports=[
+        "_sounddevice_data",
         "pynput.keyboard._win32",
         "pynput.keyboard._xorg",
         "pynput.keyboard._darwin",

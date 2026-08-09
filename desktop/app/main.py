@@ -157,7 +157,7 @@ def _create_tray_icon():
         pystray.MenuItem(
             "Launch at login",
             on_auto_start_toggle,
-            checked=lambda icon, item: autostart.is_enabled(),
+            checked=lambda item: autostart.is_enabled(),
         ),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Quit", on_quit),
