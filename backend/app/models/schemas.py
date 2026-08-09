@@ -30,17 +30,19 @@ class AudioContext(BaseModel):
 
 
 class ProcessedResponse(BaseModel):
-    """Response returned after Gemini processes the audio."""
+    """Response returned after the transcription engine processes the audio."""
 
     processed_text: str = Field(
-        description="Final cleaned, formatted text ready for insertion.",
+        description="Final cleaned, formatted text ready for insertion. "
+        "Whisper returns the raw transcription.",
     )
     raw_transcript: str = Field(
-        description="Raw transcription before intelligent processing.",
+        description="Raw transcription before intelligent processing. "
+        "Same as processed_text when using whisper.",
     )
     tone_applied: str = Field(
         default="neutral",
-        description="Tone that was applied: 'casual', 'professional', or 'neutral'.",
+        description="Tone that was applied: 'casual', 'professional', 'neutral', or 'none' (whisper).",
     )
 
 

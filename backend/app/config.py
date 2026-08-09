@@ -17,8 +17,19 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
+    # ── Transcription engine ────────────────────────────────
+    # "gemini" (default) or "whisper" (offline / local)
+    transcription_engine: str = "gemini"
+
+    # ── Whisper (local offline transcription) ────────────────
+    # "tiny.en" (39 MB, fastest), "base.en" (74 MB), "small.en" (483 MB)
+    whisper_model: str = "tiny.en"
+    whisper_device: str = "auto"  # "auto", "cpu", or "cuda"
+    whisper_compute_type: str = "auto"  # "auto", "int8", "float16", etc.
+
     # ── Gemini ──────────────────────────────────────────────
-    gemini_api_key: str
+    # Required when transcription_engine is "gemini".
+    gemini_api_key: str = ""
     gemini_model: str = "gemini-flash-latest"
 
     # ── Server ──────────────────────────────────────────────

@@ -1,7 +1,7 @@
 """
 Vocatype Backend — FastAPI Application Entry Point.
 
-Initializes the Gemini client on startup, configures CORS and security
+Initializes the transcription engine on startup, configures CORS and security
 middleware, mounts the audio processing route, and exposes observability
 endpoints (health, metrics).
 """
@@ -64,12 +64,23 @@ logger = logging.getLogger("vocatype")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
-    logger.info("🚀 Vocatype backend starting up...")
-    logger.info("Model: %s", settings.gemini_model)
+    engine = settings.transcription_engine
+    logger.info("🚀 Vocatype backend starting up (engine=%s)…", engine)
 
-    # Initialize Gemini SDK
-    initialize_gemini()
-    logger.info("✅ Gemini client initialized")
+    if engine == "whisper":
+        from app.services.whisper import _load_model
+
+        try:
+            _load_model()
+            logger.info("✅ Whisper model ready (model=%s)", settings.whisper_model)
+        except Exception as exc:
+            logger.warning("⚠ Whisper model not available at startup: %s", exc)
+    else:
+        if not settings.gemini_api_key:
+            logger.error("GEMINI_API_KEY is empty — Gemini engine cannot start.")
+            raise RuntimeError("GEMINI_API_KEY is required when TRANSCRIPTION_ENGINE=gemini.")
+        initialize_gemini()
+        logger.info("✅ Gemini client initialized (model=%s)", settings.gemini_model)
 
     yield  # App is running
 
@@ -82,8 +93,8 @@ app = FastAPI(
     title="Vocatype API",
     description=(
         "AI-powered dictation backend. Accepts audio recordings, "
-        "transcribes via Gemini 1.5 Flash, strips filler words, "
-        "adapts tone, and returns clean formatted text."
+        "transcribes via Gemini (cloud) or faster-whisper (offline), "
+        "strips filler words (Gemini), adapts tone, and returns clean formatted text."
     ),
     version="0.2.0",
     lifespan=lifespan,
@@ -127,11 +138,17 @@ async def preview_page():
 @app.get("/health", tags=["system"])
 async def health_check():
     """Health check endpoint for Cloud Run / load balancers."""
-    return {
+    engine = settings.transcription_engine
+    response: dict[str, str] = {
         "status": "healthy",
         "service": "vocatype-backend",
-        "model": settings.gemini_model,
+        "engine": engine,
     }
+    if engine == "whisper":
+        response["model"] = settings.whisper_model
+    else:
+        response["model"] = settings.gemini_model
+    return response
 
 
 @app.get("/metrics", tags=["system"], include_in_schema=False)

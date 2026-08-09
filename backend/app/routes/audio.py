@@ -11,6 +11,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
+from app.config import get_settings
 from app.models.schemas import AudioContext, ErrorResponse, ProcessedResponse
 from app.services.gemini import process_audio
 from app.services.metrics import (
@@ -31,13 +32,14 @@ router = APIRouter(tags=["audio"])
         400: {"model": ErrorResponse, "description": "Invalid request"},
         413: {"model": ErrorResponse, "description": "Audio file too large"},
         500: {"model": ErrorResponse, "description": "Processing error"},
-        503: {"model": ErrorResponse, "description": "Gemini service unavailable"},
+        503: {"model": ErrorResponse, "description": "Transcription service unavailable"},
     },
-    summary="Process dictated audio through Gemini AI",
+    summary="Process dictated audio",
     description=(
         "Upload an audio file and a JSON context string. "
-        "Gemini transcribes the audio, strips filler words, adapts tone to the "
-        "active app, and returns clean formatted text."
+        "If the backend is configured with `TRANSCRIPTION_ENGINE=whisper`, "
+        "audio is transcribed locally via faster-whisper (offline). "
+        "Otherwise the audio is sent to Gemini for transcription + tone adaptation."
     ),
 )
 async def process_audio_endpoint(
@@ -46,18 +48,22 @@ async def process_audio_endpoint(
         File(description="Audio file (.wav, .m4a, .webm, .ogg, .mp3, .flac, .aac, .3gp)"),
     ],
     context: Annotated[
-        str,
-        Form(description="JSON string with keys: app_name, platform, selected_text, language"),
+        str, Form(description="JSON string with keys: app_name, platform, selected_text, language")
     ] = "{}",
 ) -> ProcessedResponse:
     """
-    Process an audio recording through the Gemini AI pipeline.
+    Process an audio recording.
 
-    1. Validate and parse the context JSON.
-    2. Read the uploaded audio file.
-    3. Send audio + context to Gemini for transcription and processing.
-    4. Return the cleaned, formatted text.
+    In **Gemini mode** (default): transcribes via Gemini, strips filler
+    words, adapts tone based on the active app, and returns clean formatted text.
+
+    In **Whisper mode** (`TRANSCRIPTION_ENGINE=whisper`): transcribes locally
+    with faster-whisper — works fully offline. No tone adaptation or filler
+    removal is applied (the raw transcription is returned as both
+    `processed_text` and `raw_transcript`).
     """
+    settings = get_settings()
+    engine = settings.transcription_engine
 
     # ── Parse context ───────────────────────────────────────────────────────
     try:
@@ -93,7 +99,8 @@ async def process_audio_endpoint(
         )
 
     logger.info(
-        "Received audio: filename=%s, size=%d bytes, context=%s",
+        "Received audio: engine=%s filename=%s size=%d bytes context=%s",
+        engine,
         audio_file.filename,
         len(audio_bytes),
         audio_context.model_dump_json(),
@@ -101,17 +108,19 @@ async def process_audio_endpoint(
 
     AUDIO_BYTES.observe(len(audio_bytes))
 
-    # ── Process through Gemini ──────────────────────────────────────────────
+    # ── Dispatch to engine ──────────────────────────────────────────────────
     try:
         with PROCESS_AUDIO_DURATION.time():
-            result = await process_audio(
-                audio_bytes=audio_bytes,
-                filename=audio_file.filename or "audio.wav",
-                content_type=audio_file.content_type,
-                context=audio_context.model_dump(),
-            )
+            if engine == "whisper":
+                result = _process_whisper(audio_bytes, audio_context)
+            else:
+                result = await process_audio(
+                    audio_bytes=audio_bytes,
+                    filename=audio_file.filename or "audio.wav",
+                    content_type=audio_file.content_type,
+                    context=audio_context.model_dump(),
+                )
     except ValueError as e:
-        # File too large or invalid format
         PROCESS_AUDIO_TOTAL.labels(outcome="error").inc()
         logger.warning("Audio validation error: %s", e)
         raise HTTPException(
@@ -120,7 +129,7 @@ async def process_audio_endpoint(
         ) from e
     except RuntimeError as e:
         PROCESS_AUDIO_TOTAL.labels(outcome="error").inc()
-        logger.error("Gemini processing error: %s", e)
+        logger.error("Processing error: %s", e)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),
@@ -135,3 +144,18 @@ async def process_audio_endpoint(
 
     PROCESS_AUDIO_TOTAL.labels(outcome="success").inc()
     return ProcessedResponse(**result)
+
+
+def _process_whisper(audio_bytes: bytes, context: AudioContext) -> dict[str, str]:
+    """Transcribe locally with faster-whisper and return a Gemini-compatible dict."""
+    from app.services.whisper import transcribe as whisper_transcribe
+
+    language = context.language or "en"
+
+    transcript = whisper_transcribe(audio_bytes, language=language)
+
+    return {
+        "processed_text": transcript,
+        "raw_transcript": transcript,
+        "tone_applied": "none",
+    }

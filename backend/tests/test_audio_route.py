@@ -55,6 +55,8 @@ class TestHealth:
         body = resp.json()
         assert body["status"] == "healthy"
         assert body["service"] == "vocatype-backend"
+        assert body["engine"] == "gemini"
+        assert body["model"] == "gemini-flash-latest"
 
 
 class TestProcessAudio:
@@ -232,3 +234,60 @@ class TestMetricsEndpoint:
         resp = client.get("/metrics")
         assert resp.status_code == 200
         assert "text/plain" in resp.headers["content-type"]
+
+
+class TestWhisperEngine:
+    @staticmethod
+    def _patch_engine(mocker, engine: str):
+        from app.config import Settings
+
+        ws = Settings(
+            transcription_engine=engine,
+            gemini_api_key="test",
+            whisper_model="tiny.en",
+        )
+        mocker.patch("app.routes.audio.get_settings", return_value=ws)
+
+    def test_whisper_engine_returns_raw_transcript(
+        self, client: TestClient, wav_bytes: bytes, mocker
+    ) -> None:
+        self._patch_engine(mocker, "whisper")
+        mocker.patch("app.services.whisper.transcribe", return_value="hello world")
+
+        resp = client.post(
+            "/process-audio",
+            files={"audio_file": ("test.wav", wav_bytes, "audio/wav")},
+            data={"context": json.dumps({"app_name": "Test"})},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["processed_text"] == "hello world"
+        assert body["raw_transcript"] == "hello world"
+        assert body["tone_applied"] == "none"
+
+    def test_whisper_engine_with_language(
+        self, client: TestClient, wav_bytes: bytes, mocker
+    ) -> None:
+        self._patch_engine(mocker, "whisper")
+        mock_transcribe = mocker.patch("app.services.whisper.transcribe", return_value="hola mundo")
+
+        client.post(
+            "/process-audio",
+            files={"audio_file": ("test.wav", wav_bytes, "audio/wav")},
+            data={"context": json.dumps({"app_name": "Test", "language": "es"})},
+        )
+        mock_transcribe.assert_called_once()
+        assert mock_transcribe.call_args[1]["language"] == "es"
+
+    def test_whisper_engine_default_gemini_still_works(
+        self, client: TestClient, wav_bytes: bytes, mocker
+    ) -> None:
+        """gemini engine should still be the default path."""
+        _mock_process_audio(mocker)
+        resp = client.post(
+            "/process-audio",
+            files={"audio_file": ("test.wav", wav_bytes, "audio/wav")},
+            data={"context": "{}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["tone_applied"] == "neutral"

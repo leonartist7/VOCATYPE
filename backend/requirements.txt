@@ -5,7 +5,8 @@ uvicorn[standard]>=0.30.0
 python-multipart>=0.0.9
 
 # AI
-google-genai>=1.0.0
+google-genai>=1.0.0          # Gemini SDK (cloud transcription)
+faster-whisper>=1.0.0        # Local offline transcription (CTranslate2)
 
 # Config
 pydantic-settings>=2.5.0
