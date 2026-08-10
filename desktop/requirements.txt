@@ -16,7 +16,7 @@ pygetwindow>=0.0.9; sys_platform == "win32"
 
 # System tray
 pystray>=0.19.5
-Pillow>=10.0.0
+Pillow>=12.3.0
 
 # HTTP client
 httpx>=0.27.0
