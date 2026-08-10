@@ -38,8 +38,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PyInstaller spec (`desktop/vocatype.spec`) for building the desktop client.
 - Web Studio `/preview` now has an optional API token field (persisted in
   localStorage) so it works when `/process-audio` auth is enabled.
+- Graceful degradation: if DeepSeek cleaning fails (invalid key, quota, network),
+  `/process-audio` now returns the raw whisper transcript with a `cleaning_error`
+  field instead of a 503 — dictation never fails because of the LLM.
 
 ### Changed
+
+- PyInstaller spec now bundles the `sounddevice` module and its `cffi` dependency
+  (they were being lazy-imported via `importlib` and silently missing from the exe,
+  which caused "No module named 'sounddevice'" on the first hotkey press).
+- Whisper runs on CPU+int8 by default in `.env` to avoid the CUDA/cuBLAS crash on
+  machines with an NVIDIA GPU but no cuBLAS runtime.
 
 - Replaced Gemini (multimodal transcription) with whisper local STT + DeepSeek
   cleaning: cheaper, faster, and fully offline-capable.

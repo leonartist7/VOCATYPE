@@ -23,6 +23,8 @@ a = Analysis(
     ),
     hiddenimports=[
         "_sounddevice_data",
+        "sounddevice",  # lazy-imported via importlib in recorder.py — not statically visible
+        "cffi",  # sounddevice dependency, also must be explicitly bundled
         "pynput.keyboard._win32",
         "pynput.keyboard._xorg",
         "pynput.keyboard._darwin",

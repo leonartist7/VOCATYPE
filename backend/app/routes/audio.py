@@ -157,20 +157,37 @@ async def process_audio_endpoint(
 
 
 async def _process(mode: str, audio_bytes: bytes, audio_context: AudioContext) -> dict[str, str]:
-    """Run the transcription pipeline for the given mode."""
+    """Run the transcription pipeline for the given mode.
+
+    Dictation is best-effort: even in online mode, if the DeepSeek cleaning
+    call fails (invalid key, quota, network), the raw whisper transcript is
+    returned so the user still gets their words — just unpolished.
+    """
     language = audio_context.language or "en"
 
     # Always transcribe locally — whisper is the STT engine in both modes.
     transcript = whisper_transcribe(audio_bytes, language=language)
 
     if mode == "online":
-        result = await clean_transcript(transcript, audio_context.model_dump())
-        result["raw_transcript"] = transcript
-        return result
+        try:
+            result = await clean_transcript(transcript, audio_context.model_dump())
+            result["raw_transcript"] = transcript
+            result["cleaning_error"] = None
+            return result
+        except RuntimeError as e:
+            logger.warning("DeepSeek cleaning failed — falling back to raw transcript: %s", e)
+            PROCESS_AUDIO_TOTAL.labels(outcome="degraded").inc()
+            return {
+                "processed_text": transcript,
+                "raw_transcript": transcript,
+                "tone_applied": "none",
+                "cleaning_error": str(e),
+            }
 
     # Offline: raw transcript, no LLM cleaning.
     return {
         "processed_text": transcript,
         "raw_transcript": transcript,
         "tone_applied": "none",
+        "cleaning_error": None,
     }

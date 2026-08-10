@@ -70,6 +70,7 @@ class TestProcessAudio:
         assert body["processed_text"] == "Hello world."
         assert body["raw_transcript"] == "hello world"
         assert body["tone_applied"] == "neutral"
+        assert body["cleaning_error"] is None
 
     def test_offline_mode_returns_raw(self, client: TestClient, wav_bytes: bytes, mocker) -> None:
         _mock_whisper(mocker, transcript="um hello there um")
@@ -84,6 +85,7 @@ class TestProcessAudio:
         assert body["processed_text"] == "um hello there um"
         assert body["raw_transcript"] == "um hello there um"
         assert body["tone_applied"] == "none"
+        assert body["cleaning_error"] is None
 
     def test_online_override_runs_deepseek(
         self, client: TestClient, wav_bytes: bytes, mocker
@@ -139,10 +141,11 @@ class TestProcessAudio:
         assert resp.status_code == 413
         assert "too large" in resp.json()["detail"]
 
-    def test_deepseek_unavailable_returns_503(
+    def test_deepseek_unavailable_degrades_to_raw(
         self, client: TestClient, wav_bytes: bytes, mocker
     ) -> None:
-        _mock_whisper(mocker)
+        """When DeepSeek cleaning fails, dictation must still return the transcript."""
+        _mock_whisper(mocker, transcript="hello there")
         mocker.patch.object(
             audio_route,
             "clean_transcript",
@@ -153,8 +156,12 @@ class TestProcessAudio:
             files={"audio_file": ("test.wav", wav_bytes, "audio/wav")},
             data={"context": "{}"},
         )
-        assert resp.status_code == 503
-        assert "boom" in resp.json()["detail"]
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["processed_text"] == "hello there"
+        assert body["raw_transcript"] == "hello there"
+        assert body["tone_applied"] == "none"
+        assert "boom" in body["cleaning_error"]
 
     def test_unexpected_error_returns_500(
         self, client: TestClient, wav_bytes: bytes, mocker

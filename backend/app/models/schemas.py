@@ -44,6 +44,11 @@ class ProcessedResponse(BaseModel):
         default="neutral",
         description="Tone that was applied: 'casual', 'professional', 'neutral', or 'none' (whisper).",
     )
+    cleaning_error: str | None = Field(
+        default=None,
+        description="Set when online cleaning (DeepSeek) failed and the raw "
+        "transcript was returned instead — dictation still works, just unpolished.",
+    )
 
 
 class ErrorResponse(BaseModel):
