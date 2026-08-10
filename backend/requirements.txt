@@ -13,4 +13,4 @@ pydantic-settings>=2.5.0
 python-dotenv>=1.0.0
 
 # Observability
-prometheus-client>=0.20.0
+prometheus-client>=0.26.0
