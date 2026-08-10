@@ -9,7 +9,7 @@ faster-whisper>=1.0.0        # Local offline transcription (CTranslate2)
 httpx>=0.27.0                # DeepSeek API client (OpenAI-compatible)
 
 # Config
-pydantic-settings>=2.5.0
+pydantic-settings>=2.14.2
 python-dotenv>=1.0.0
 
 # Observability
