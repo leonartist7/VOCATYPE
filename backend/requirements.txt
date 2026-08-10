@@ -2,7 +2,7 @@
 # Core
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
-python-multipart>=0.0.9
+python-multipart>=0.0.32
 
 # AI
 faster-whisper>=1.0.0        # Local offline transcription (CTranslate2)
