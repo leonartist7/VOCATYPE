@@ -20,11 +20,7 @@ jobs:
       pull-requests: read
       issues: read
     env:
-      
-OPENCODE_API_KEY
-: ${{ secrets.
-OPENCODE_API_KEY
- }}
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -35,5 +31,4 @@ OPENCODE_API_KEY
       - name: Run opencode
         uses: anomalyco/opencode/github@latest
         with:
-          model: 
-opencode/deepseek-v4-flash-free
+          model: opencode/deepseek-v4-flash-free
