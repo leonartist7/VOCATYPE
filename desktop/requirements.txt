@@ -9,7 +9,7 @@ sounddevice>=0.5.0
 
 # Text injection
 pyautogui>=0.9.54
-pyperclip>=1.9.0
+pyperclip>=1.11.0
 
 # Active window detection (Windows)
 pygetwindow>=0.0.9; sys_platform == "win32"
