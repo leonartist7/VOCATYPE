@@ -8,7 +8,7 @@
 #   sounddevice, pyautogui, pyperclip, pystray, Pillow, pygetwindow
 
 # Runtime deps required at import time by the tested modules
-pynput>=1.7.6
+pynput>=1.8.2
 httpx>=0.27.0
 python-dotenv>=1.0.0
 

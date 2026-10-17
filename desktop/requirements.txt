@@ -1,6 +1,6 @@
 # ── Vocatype Desktop Client Dependencies ──────────────────────────
 # Hotkey
-pynput>=1.7.6
+pynput>=1.8.2
 
 # Audio recording
 # sounddevice bundles PortAudio binaries (wheels for all Python versions,
